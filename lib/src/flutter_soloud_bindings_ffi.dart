@@ -472,6 +472,22 @@ class FlutterSoLoudFfi {
   late final _getWave =
       _getWavePtr.asFunction<void Function(ffi.Pointer<ffi.Float>)>();
 
+  /// Returns valid data only if VisualizationEnabled is true
+  ///
+  /// fft
+  /// Return a float array containing wave data.
+  PlayerErrors getFullWave(ffi.Pointer<ffi.Float> wave) {
+    _getFullWave(wave);
+    return PlayerErrors.noError;
+  }
+
+  late final _getFullWavePtr =
+  _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Float>)>>(
+    'getFullWave',
+  );
+  late final _getFullWave =
+  _getFullWavePtr.asFunction<void Function(ffi.Pointer<ffi.Float>)>();
+
   /// Smooth FFT data.
   /// When new data is read and the values are decreasing, the new value will be
   /// decreased with an amplitude between the old and the new value.
@@ -493,21 +509,22 @@ class FlutterSoLoudFfi {
   late final _setFftSmoothing =
       _setFftSmoothingPtr.asFunction<void Function(double)>();
 
-  /// Return in [samples] a 512 float array.
-  /// The first 256 floats represent the FFT frequencies data [0.0~1.0].
-  /// The other 256 floats represent the wave data (amplitude) [-1.0~1.0].
+  /// Return in [samples] a 1024 float array.
+  /// The 1024 floats represent the wave data (amplitude) [-1.0~1.0].
   ///
   /// [samples] should be allocated and freed in dart side
-  void getAudioTexture(ffi.Pointer<ffi.Float> samples) {
-    return _getAudioTexture(samples);
+  PlayerErrors getAudioTexture(ffi.Pointer<ffi.Float> samples) {
+    if (samples == ffi.nullptr) return PlayerErrors.nullPointer;
+    final ret = _getAudioTexture(samples);
+    return PlayerErrors.values[ret];
   }
 
   late final _getAudioTexturePtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Float>)>>(
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.Float>)>>(
     'getAudioTexture',
   );
   late final _getAudioTexture =
-      _getAudioTexturePtr.asFunction<void Function(ffi.Pointer<ffi.Float>)>();
+      _getAudioTexturePtr.asFunction<int Function(ffi.Pointer<ffi.Float>)>();
 
   /// Return a floats matrix of 256x512
   /// Every row are composed of 256 FFT values plus 256 of wave data

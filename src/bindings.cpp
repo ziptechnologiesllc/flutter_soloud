@@ -336,7 +336,7 @@ extern "C"
     /// Returns valid data only if VisualizationEnabled is true
     ///
     /// fft
-    /// Return a 256 float array containing wave data.
+    /// Return a 1024 float array containing wave data.
     FFI_PLUGIN_EXPORT void getWave(float *wave)
     {
         wave = player.getWave();
@@ -368,14 +368,12 @@ extern "C"
     {
         if (analyzer.get() == nullptr)
         {
-            memset(samples, 0, sizeof(float) * 512);
+            memset(samples, 0, sizeof(float) * 1024);
             return;
         }
         float *wave = player.getWave();
-        float *fft = analyzer.get()->calcFFT(wave);
 
-        memcpy(samples, fft, sizeof(float) * 256);
-        memcpy(samples + 256, wave, sizeof(float) * 256);
+        memcpy(samples, wave, sizeof(float) * 1024);
     }
 
     /// Return a floats matrix of 256x512
@@ -385,18 +383,18 @@ extern "C"
     /// up (the last one will be lost).
     ///
     /// [samples]
-    float texture2D[256][512];
+    float texture2D[256][1024];
     FFI_PLUGIN_EXPORT enum PlayerErrors getAudioTexture2D(float **samples)
     {
         if (analyzer.get() == nullptr || !player.isVisualizationEnabled())
         {
             if (*samples == nullptr)
                 return unknownError;
-            memset(samples, 0, sizeof(float) * 512 * 256);
+            memset(samples, 0, sizeof(float) * 1024 * 256);
             return backendNotInited;
         }
         /// shift up 1 row
-        memmove(*texture2D + 512, texture2D, sizeof(float) * 512 * 255);
+        memmove(*texture2D + 1024, texture2D, sizeof(float) * 1024 * 255);
         /// store the new 1st row
         getAudioTexture(texture2D[0]);
         *samples = *texture2D;

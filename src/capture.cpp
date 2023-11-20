@@ -4,18 +4,23 @@
 #include <cstdarg>
 #include <memory.h>
 
-#define CAPTURE_BUFFER_SIZE 1024
+#define CAPTURE_BUFFER_SIZE 256
+#define BIG_BUFFER_SIZE 44100 * 10
 
+int currentFrame = 0;
 float capturedBuffer[CAPTURE_BUFFER_SIZE];
+float bigBuffer[BIG_BUFFER_SIZE];
 void data_callback(ma_device *pDevice, void *pOutput, const void *pInput, ma_uint32 frameCount)
 {
+
     // Process the captured audio data as needed
     // For example, you can copy it to a buffer for later use.
     float *captured = (float *)(pInput); // Assuming float format
     // Do something with the captured audio data...
     // printf("framecound: %d   data_callback %f\n", frameCount, captured[0]);
-
     memcpy(capturedBuffer, captured, sizeof(float) * CAPTURE_BUFFER_SIZE);
+    memcpy(&bigBuffer[CAPTURE_BUFFER_SIZE*currentFrame], captured, sizeof(float) * CAPTURE_BUFFER_SIZE);
+    currentFrame = currentFrame + 1;
 }
 
 Capture::Capture() : mInited(false){};
@@ -128,17 +133,12 @@ CaptureErrors Capture::stopCapture()
     return capture_noError;
 }
 
-float waveData[256];
 float *Capture::getWave()
 {
-    int n = CAPTURE_BUFFER_SIZE >> 8;
-    for (int i = 0; i < 256; i++)
-    {
-        waveData[i] = (capturedBuffer[i * n] +
-                       capturedBuffer[i * n + 1] +
-                       capturedBuffer[i * n + 2] +
-                       capturedBuffer[i * n + 3]) /
-                      n;
-    }
-    return waveData;
+    return capturedBuffer;
+}
+
+float *Capture::getFullWave()
+{
+    return bigBuffer;
 }

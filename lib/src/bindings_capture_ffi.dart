@@ -154,6 +154,20 @@ class FlutterCaptureFfi {
     return CaptureErrors.values[ret];
   }
 
+  CaptureErrors getCaptureAudioTexture(
+      ffi.Pointer<ffi.Float> samples,
+      ) {
+    int ret = _getCaptureAudioTexture(samples);
+    return CaptureErrors.values[ret];
+  }
+
+  late final _getCaptureAudioTexturePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(ffi.Pointer<ffi.Float>)>>(
+      'getCaptureTexture');
+  late final _getCaptureAudioTexture = _getCaptureAudioTexturePtr
+      .asFunction<int Function(ffi.Pointer<ffi.Float>)>();
+
   late final _setCaptureFftSmoothingPtr =
       _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Float)>>(
           'setCaptureFftSmoothing');

@@ -76,29 +76,36 @@ FFI_PLUGIN_EXPORT enum CaptureErrors stopCapture()
     return capture.stopCapture();
 }
 
-
-FFI_PLUGIN_EXPORT void getCaptureTexture(float* samples)
+FFI_PLUGIN_EXPORT enum CaptureErrors getFullWave(float* wave)
 {
-    if (analyzerCapture.get() == nullptr || !capture.isInited()) {
-        memset(samples,0, sizeof(float) * 512);
-        return;
-    }
-    float *wave = capture.getWave();
-    float *fft = analyzerCapture.get()->calcFFT(wave);
-
-    memcpy(samples, fft, sizeof(float) * 256);
-    memcpy(samples + 256, wave, sizeof(float) * 256);
+    float *recording = capture.getFullWave();
+    memcpy(wave, recording, sizeof(float) * 441000);
+    return capture_noError;
 }
 
-float capturedTexture2D[256][512];
+
+
+FFI_PLUGIN_EXPORT enum CaptureErrors getCaptureTexture(float* samples)
+{
+    if (analyzerCapture.get() == nullptr || !capture.isInited()) {
+        memset(samples,0, sizeof(float) * 256);
+        return capture_not_inited;
+    }
+    float *wave = capture.getWave();
+
+    memcpy(samples, wave, sizeof(float) * 256);
+    return capture_noError;
+}
+
+float capturedTexture2D[256][256];
 FFI_PLUGIN_EXPORT enum CaptureErrors getCaptureAudioTexture2D(float** samples)
 {
     if (analyzerCapture.get() == nullptr || !capture.isInited()) {
-        memset(samples,0, sizeof(float) * 512 * 256);
+        memset(samples,0, sizeof(float) * 256 * 256);
         return capture_not_inited;
     }
     /// shift up 1 row
-    memmove(*capturedTexture2D+512, capturedTexture2D, sizeof(float) * 512 * 255);
+    memmove(*capturedTexture2D+256, capturedTexture2D, sizeof(float) * 256 * 255);
     /// store the new 1st row
     getCaptureTexture(capturedTexture2D[0]);
     *samples = *capturedTexture2D;

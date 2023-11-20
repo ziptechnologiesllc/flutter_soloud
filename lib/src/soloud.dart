@@ -869,6 +869,23 @@ class SoLoud {
     return PlayerErrors.noError;
   }
 
+  /// Return the captured audio
+  /// Return [PlayerErrors.noError] if success
+  ///
+  PlayerErrors getFullWave(
+      ffi.Pointer<ffi.Float> audioData) {
+    if (!isPlayerInited || audioData == ffi.nullptr) {
+      printPlayerError('getFullWave()', PlayerErrors.engineNotInited);
+      return PlayerErrors.engineNotInited;
+    }
+    final ret = SoLoudController().soLoudFFI.getFullWave(audioData);
+    if (ret != PlayerErrors.noError || audioData.value == ffi.nullptr) {
+      printPlayerError('getFullWave()', PlayerErrors.nullPointer);
+      return PlayerErrors.nullPointer;
+    }
+    return PlayerErrors.noError;
+  }
+
   /// Smooth FFT data.
   /// When new data is read and the values are decreasing, the new value
   /// will be decreased with an amplitude between the old and the new value.
@@ -1099,6 +1116,24 @@ class SoLoud {
     if (ret != CaptureErrors.captureNoError || audioData.value == ffi.nullptr) {
       printCaptureError(
           'getCaptureAudioTexture2D()', CaptureErrors.nullPointer);
+      return CaptureErrors.nullPointer;
+    }
+    return CaptureErrors.captureNoError;
+  }
+
+  CaptureErrors getCaptureAudioTexture(
+      ffi.Pointer<ffi.Float> audioData) {
+    if (!isCaptureInited || audioData == ffi.nullptr) {
+      printCaptureError(
+          'getCaptureTexture()', CaptureErrors.captureNotInited);
+      return CaptureErrors.captureNotInited;
+    }
+
+    final ret =
+    SoLoudController().captureFFI.getCaptureAudioTexture(audioData);
+    if (ret != CaptureErrors.captureNoError || audioData.value == ffi.nullptr) {
+      printCaptureError(
+          'getCaptureTexture()', CaptureErrors.nullPointer);
       return CaptureErrors.nullPointer;
     }
     return CaptureErrors.captureNoError;

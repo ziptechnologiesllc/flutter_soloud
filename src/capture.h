@@ -42,6 +42,7 @@ public:
     CaptureErrors stopCapture();
 
     float *getWave();
+    float *getFullWave();
 
 private:
     ma_context context;
