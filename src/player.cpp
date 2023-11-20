@@ -133,6 +133,39 @@ PlayerErrors Player::loadFile(
     return (PlayerErrors)result;
 }
 
+
+PlayerErrors Player::loadFromMemory(float *buffer, unsigned int &hash, unsigned int &length)
+{
+    if (!mInited)
+        return backendNotInited;
+
+    hash = 0;
+
+    unsigned int newHash = (unsigned int)std::hash<std::string>{}("memory-mapped-sample");
+    /// check if the sound has been already loaded
+    auto const &s = std::find_if(
+            sounds.begin(), sounds.end(),
+            [&](std::unique_ptr<ActiveSound> const &f)
+            { return f->soundHash == newHash; });
+    if (s != sounds.end()) {
+        hash = newHash;
+        return fileAlreadyLoaded;
+    }
+
+    sounds.push_back(std::make_unique<ActiveSound>());
+    sounds.back().get()->completeFileName = std::string("memory-mapped-sample");
+    hash = sounds.back().get()->soundHash = newHash;
+    sounds.back().get()->sound = std::make_unique<SoLoud::Wav>();
+    sounds.back().get()->soundType = TYPE_WAV;
+    SoLoud::result result =
+            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadRawWave(buffer, 441000, 44100.0f, 1, false, true);
+    if (result != SoLoud::SO_NO_ERROR)
+    {
+        sounds.emplace_back();
+    }
+    return (PlayerErrors)result;
+}
+
 PlayerErrors Player::loadWaveform(
         int waveform, 
         bool superWave,

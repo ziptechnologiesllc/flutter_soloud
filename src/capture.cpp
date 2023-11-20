@@ -1,12 +1,18 @@
 #include "capture.h"
 #include "soloud.h"
+#include "stdlib.h"
 
 #include <cstdarg>
 #include <memory.h>
 
 #define CAPTURE_BUFFER_SIZE 1024
+#define BIG_BUFFER_SIZE 44100 * 10
 
 float capturedBuffer[CAPTURE_BUFFER_SIZE];
+float *bigBuffer;
+int *currentFrame;
+
+//float bigBuffer[BIG_BUFFER_SIZE];
 void data_callback(ma_device *pDevice, void *pOutput, const void *pInput, ma_uint32 frameCount)
 {
     // Process the captured audio data as needed
@@ -16,6 +22,10 @@ void data_callback(ma_device *pDevice, void *pOutput, const void *pInput, ma_uin
     // printf("framecount: %d\n", frameCount);
 
     memcpy(capturedBuffer, captured, sizeof(float) * CAPTURE_BUFFER_SIZE);
+    //memcpy(pOutput, captured, sizeof(float) * CAPTURE_BUFFER_SIZE);
+    //platform_log("%fs", (((double) *currentFrame * (double) CAPTURE_BUFFER_SIZE))/44100.0f);
+    memcpy(&bigBuffer[CAPTURE_BUFFER_SIZE * *currentFrame], captured, sizeof(float) * CAPTURE_BUFFER_SIZE);
+    *currentFrame = *currentFrame + 1;
 }
 
 Capture::Capture() : mInited(false){};
@@ -63,7 +73,7 @@ std::vector<CaptureDevice> Capture::listCaptureDevices()
     return ret;
 }
 
-CaptureErrors Capture::init(int deviceID)
+CaptureErrors Capture::init(int deviceID, float* bufferFromDart, int* capturedFramesPointer)
 {
     if (mInited) return capture_init_failed;
     deviceConfig = ma_device_config_init(ma_device_type_capture);
@@ -82,8 +92,16 @@ CaptureErrors Capture::init(int deviceID)
         printf("Failed to initialize capture device.\n");
         return capture_init_failed;
     }
+    initializeBuffer(bufferFromDart, capturedFramesPointer);
     mInited = true;
+
     return capture_noError;
+}
+
+void Capture::initializeBuffer(float* bufferFromDart, int* frameCountPointer)
+{
+    bigBuffer = (float *) bufferFromDart;
+    currentFrame = (int *) frameCountPointer;
 }
 
 void Capture::dispose()
@@ -141,4 +159,14 @@ float *Capture::getWave()
                       n;
     }
     return waveData;
+}
+
+float *Capture::getFullWave()
+{
+    return bigBuffer;
+}
+
+int* Capture::getRecordedFrameCount()
+{
+    return currentFrame;
 }

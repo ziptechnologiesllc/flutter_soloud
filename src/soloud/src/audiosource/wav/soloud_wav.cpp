@@ -376,7 +376,7 @@ namespace SoLoud
 
 	result Wav::loadRawWave(float *aMem, unsigned int aLength, float aSamplerate, unsigned int aChannels, bool aCopy, bool aTakeOwndership)
 	{
-		if (aMem == 0 || aLength == 0 || aSamplerate <= 0 || aChannels < 1)
+		if (aLength == 0 || aSamplerate <= 0 || aChannels < 1)
 			return INVALID_PARAMETER;
 		stop();
 		delete[] mData;

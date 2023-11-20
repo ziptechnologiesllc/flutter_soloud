@@ -3,7 +3,9 @@
 import 'dart:async';
 import 'dart:ffi' as ffi;
 import 'dart:isolate';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:flutter_soloud/src/audio_isolate.dart';
 import 'package:flutter_soloud/src/soloud_controller.dart';
@@ -684,6 +686,35 @@ interface class SoLoud {
     return (error: ret.error, sound: ret.sound);
   }
 
+  /// Load a new sound from memory to be played once or multiple times later
+  ///
+  /// [buffer] the buffer pointer to float buffer
+  /// Returns PlayerErrors.noError if success and a new sound
+  ///
+  Future<({PlayerErrors error, SoundProps? sound})> loadFromMemory(
+      ffi.Pointer<ffi.Float> buffer, int hash, int length) async {
+    if (!isPlayerInited) {
+      return (error: PlayerErrors.engineNotInited, sound: null);
+    }
+    print("Sending buffer address ${buffer.address}");
+    _mainToIsolateStream?.send(
+      {
+        'event': MessageEvents.loadFromMemory,
+        'args': (buffer: buffer.address, hash: hash, length: length),
+      },
+    );
+    final ret = (await _waitForEvent(
+      MessageEvents.loadFromMemory,
+      (buffer: buffer.address, hash: hash, length: length),
+    )) as ({PlayerErrors error, int soundHash});
+    SoundProps sound = SoundProps(ret.soundHash);
+    if (ret.error == PlayerErrors.noError) {
+      activeSounds.add(sound);
+    }
+    printPlayerError('loadFromMemory()', ret.error);
+    return (error: ret.error, sound: sound);
+  }
+
   /// Load a new waveform to be played once or multiple times later
   ///
   /// [waveform]
@@ -1223,6 +1254,38 @@ interface class SoLoud {
     return PlayerErrors.noError;
   }
 
+  /// Return the captured audio
+  /// Return [PlayerErrors.noError] if success
+  ///
+  PlayerErrors getFullWave(ffi.Pointer<ffi.Float> audioData) {
+    if (!isPlayerInited || audioData == ffi.nullptr) {
+      _logPlayerError(PlayerErrors.engineNotInited, from: 'getFullWave() result');
+      return PlayerErrors.engineNotInited;
+    }
+    final ret = SoLoudController().captureFFI.getFullWave(audioData);
+    if (ret != PlayerErrors.noError || audioData.value == ffi.nullptr) {
+      _logPlayerError(PlayerErrors.nullPointer, from: 'getFullWave() result');
+      return PlayerErrors.nullPointer;
+    }
+    return PlayerErrors.noError;
+  }
+
+  /// Return the captured audio frame count
+  /// Return [PlayerErrors.noError] if success
+  ///
+  PlayerErrors getRecordedFrameCount(ffi.Pointer<ffi.Int> frameCount) {
+    if (!isPlayerInited || frameCount == ffi.nullptr) {
+      printPlayerError('getRecordedFrameCount()', PlayerErrors.engineNotInited);
+      return PlayerErrors.engineNotInited;
+    }
+    final ret = SoLoudController().captureFFI.getRecordedFrameCount(frameCount);
+    if (ret != PlayerErrors.noError || frameCount.value == ffi.nullptr) {
+      printPlayerError('getRecordedFrameCount()', PlayerErrors.nullPointer);
+      return PlayerErrors.nullPointer;
+    }
+    return PlayerErrors.noError;
+  }
+
   /// Smooth FFT data.
   /// When new data is read and the values are decreasing, the new value
   /// will be decreased with an amplitude between the old and the new value.
@@ -1385,9 +1448,21 @@ interface class SoLoud {
   /// Return [CaptureErrors.captureNoError] if no error.
   ///
   @Deprecated('Use SoLoudCapture.initialize() instead '
-      '(all capture-related methods were moved to SoLoudCapture class)')
-  CaptureErrors initCapture({int deviceID = -1}) =>
-      SoLoudCapture.instance.initialize();
+         '(all capture-related methods were moved to SoLoudCapture class)')
+  CaptureErrors initCapture(
+      {int deviceID = -1,
+      required ffi.Pointer<ffi.Float> buffer,
+      required ffi.Pointer<ffi.Int> recordHead}) {
+    final ret =
+        SoLoudController().captureFFI.initCapture(deviceID, buffer, recordHead);
+    _logCaptureError(ret,'initCapture()');
+    if (ret == CaptureErrors.captureNoError) {
+      isCaptureInited = true;
+      audioEvent.add(AudioEvent.captureStarted);
+    }
+
+    return ret;
+  }
 
   /// Get the status of the device.
   ///
@@ -1430,6 +1505,24 @@ interface class SoLoud {
   CaptureErrors getCaptureAudioTexture2D(
           ffi.Pointer<ffi.Pointer<ffi.Float>> audioData) =>
       SoLoudCapture.instance.getCaptureAudioTexture2D(audioData);
+
+  CaptureErrors getCaptureAudioTexture(
+      ffi.Pointer<ffi.Float> audioData) {
+    if (!isCaptureInited || audioData == ffi.nullptr) {
+      printCaptureError(
+          'getCaptureTexture()', CaptureErrors.captureNotInited);
+      return CaptureErrors.captureNotInited;
+    }
+
+    final ret =
+    SoLoudController().captureFFI.getCaptureAudioTexture(audioData);
+    if (ret != CaptureErrors.captureNoError || audioData.value == ffi.nullptr) {
+      printCaptureError(
+          'getCaptureTexture()', CaptureErrors.nullPointer);
+      return CaptureErrors.nullPointer;
+    }
+    return CaptureErrors.captureNoError;
+  }
 
   /// Smooth FFT data.
   ///

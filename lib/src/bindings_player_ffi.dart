@@ -117,7 +117,7 @@ class FlutterSoLoudFfi {
   /// [LoadMode] if `LoadMode.memory`, Soloud::wav will be used which loads
   /// all audio data into memory. Used to prevent gaps or lags
   /// when seeking/starting a sound (less CPU, more memory allocated).
-  /// If `LoadMode.disk` is used, the audio data is loaded 
+  /// If `LoadMode.disk` is used, the audio data is loaded
   /// from the given file when needed (more CPU, less memory allocated).
   /// See the [seek] note problem when using [LoadMode] = `LoadMode.disk`.
   /// [soundHash] return hash of the sound.
@@ -148,6 +148,39 @@ class FlutterSoLoudFfi {
           )>>('loadFile');
   late final _loadFile = _loadFilePtr.asFunction<
       int Function(ffi.Pointer<ffi.Char>, int, ffi.Pointer<ffi.UnsignedInt>)>();
+
+  /// Load a new sound to be played once or multiple times later
+  ///
+  /// [completeFileName] the complete file path
+  /// [soundHash] return hash of the sound
+  /// Returns [PlayerErrors.noError] if success
+  ({PlayerErrors error, int soundHash}) loadFromMemory(ffi.Pointer<ffi.Float> buffer, int hash, int length ) {
+    // ignore: omit_local_variable_types
+    final ffi.Pointer<ffi.UnsignedInt> h =
+    calloc(ffi.sizeOf<ffi.UnsignedInt>());
+    final ffi.Pointer<ffi.UnsignedInt> l =
+    calloc(ffi.sizeOf<ffi.UnsignedInt>());
+
+    final e = _loadFromMemory(
+      buffer,
+      h,
+      l
+    );
+    final ret = (error: PlayerErrors.values[e], soundHash: h.value);
+    calloc.free(h);
+    calloc.free(l);
+    return ret;
+  }
+
+  late final _loadFromMemoryPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(
+              ffi.Pointer<ffi.Float>,
+              ffi.Pointer<ffi.UnsignedInt>,
+              ffi.Pointer<ffi.UnsignedInt>
+              )>>('loadFromMemory');
+  late final _loadFromMemory = _loadFromMemoryPtr.asFunction<
+      int Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>, ffi.Pointer<ffi.UnsignedInt>)>();
 
   /// Load a new waveform to be played once or multiple times later
   ///
@@ -487,6 +520,22 @@ class FlutterSoLoudFfi {
   late final _getWave =
       _getWavePtr.asFunction<void Function(ffi.Pointer<ffi.Float>)>();
 
+  /// Returns valid data only if VisualizationEnabled is true
+  ///
+  /// fft
+  /// Return a float array containing wave data.
+  PlayerErrors getFullWave(ffi.Pointer<ffi.Float> wave) {
+    _getFullWave(wave);
+    return PlayerErrors.noError;
+  }
+
+  late final _getFullWavePtr =
+  _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Float>)>>(
+    'getFullWave',
+  );
+  late final _getFullWave =
+  _getFullWavePtr.asFunction<void Function(ffi.Pointer<ffi.Float>)>();
+
   /// Smooth FFT data.
   /// When new data is read and the values are decreasing, the new value will be
   /// decreased with an amplitude between the old and the new value.
@@ -563,11 +612,11 @@ class FlutterSoLoudFfi {
   /// [time]
   /// [handle] the sound handle
   /// Returns [PlayerErrors.noError] if success
-  /// 
+  ///
   /// NOTE: when seeking an MP3 file loaded using `mode`=`LoadMode.disk` the
   /// seek operation is performed but there will be delays. This occurs because
   /// the MP3 codec must compute each frame length to gain a new position.
-  /// The problem is explained in souloud_wavstream.cpp 
+  /// The problem is explained in souloud_wavstream.cpp
   /// in `WavStreamInstance::seek` function.
   ///
   /// This mode is useful ie for background music, not for a music player

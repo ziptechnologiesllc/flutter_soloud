@@ -79,19 +79,31 @@ extern "C"
     /// all audio data into memory. This will be useful when
     /// the audio is short, ie for game sounds, mainly used to prevent
     /// gaps or lags when starting a sound (less CPU, more memory allocated).
-    /// If false, Soloud::wavStream will be used and the audio data is loaded 
+    /// If false, Soloud::wavStream will be used and the audio data is loaded
     /// from the given file when needed (more CPU, less memory allocated).
     /// See the [seek] note problem when using [loadIntoMem] = false
     /// [hash] return hash of the sound
     /// Returns [PlayerErrors.noError] if success
     FFI_PLUGIN_EXPORT enum PlayerErrors loadFile(
-        char *completeFileName, 
-        bool loadIntoMem, 
+        char *completeFileName,
+        bool loadIntoMem,
         unsigned int *hash)
     {
         if (!player.isInited())
             return backendNotInited;
         return (PlayerErrors)player.loadFile(completeFileName, loadIntoMem, *hash);
+    }
+
+    /// Load a new sound to be played once or multiple times later
+    ///
+    /// [completeFileName] the complete file path
+    /// [hash] return hash of the sound
+    /// Returns [PlayerErrors.noError] if success
+    FFI_PLUGIN_EXPORT enum PlayerErrors loadFromMemory(float *buffer, unsigned int *hash, unsigned int *length)
+    {
+        if (!player.isInited())
+            return backendNotInited;
+        return (PlayerErrors)player.loadFromMemory(buffer, *hash, *length);
     }
 
     /// Load a new waveform to be played once or multiple times later
@@ -428,16 +440,16 @@ extern "C"
     /// [time]
     /// [handle] the sound handle
     /// Returns [PlayerErrors.noError] if success
-    /// 
+    ///
     /// NOTE: when seeking an mp3 file loaded using `loadIntoMem`=false
-    /// the seek operation is not performed due to lags. This occurs because the 
+    /// the seek operation is not performed due to lags. This occurs because the
     /// mp3 codec must compute each frame length to gain a new position.
     /// The problem is explained in souloud_wavstream.cpp
     /// in `WavStreamInstance::seek` function.
     ///
     /// This mode is useful ie for background music, not for a music player
     /// where a seek slider for mp3s is a must.
-    /// If you need seeking mp3, please, use `loadIntoMem`=true instead 
+    /// If you need seeking mp3, please, use `loadIntoMem`=true instead
     /// or other audio formats!
     ///
     FFI_PLUGIN_EXPORT enum PlayerErrors seek(unsigned int handle, float time)

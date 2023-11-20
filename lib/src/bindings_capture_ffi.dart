@@ -84,14 +84,18 @@ class FlutterCaptureFfi {
       void Function(ffi.Pointer<ffi.Pointer<_CaptureDevice>>, int)>();
 
   ///
-  CaptureErrors initCapture(int deviceID) {
-    final e = _initCapture(deviceID);
+  CaptureErrors initCapture(int deviceID, ffi.Pointer<ffi.Float> buffer,
+      ffi.Pointer<ffi.Int> recordHead) {
+    final e = _initCapture(deviceID, buffer, recordHead);
     return CaptureErrors.values[e];
   }
 
-  late final _initCapturePtr =
-      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Int)>>('initCapture');
-  late final _initCapture = _initCapturePtr.asFunction<int Function(int)>();
+  late final _initCapturePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(ffi.Int, ffi.Pointer<ffi.Float>,
+              ffi.Pointer<ffi.Int>)>>('initCapture');
+  late final _initCapture = _initCapturePtr.asFunction<
+      int Function(int, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Int>)>();
 
   void disposeCapture() {
     return _disposeCapture();
@@ -154,9 +158,48 @@ class FlutterCaptureFfi {
     return CaptureErrors.values[ret];
   }
 
+  CaptureErrors getCaptureAudioTexture(
+    ffi.Pointer<ffi.Float> samples,
+  ) {
+    int ret = _getCaptureAudioTexture(samples);
+    return CaptureErrors.values[ret];
+  }
+
+  late final _getCaptureAudioTexturePtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.Float>)>>(
+          'getCaptureTexture');
+  late final _getCaptureAudioTexture = _getCaptureAudioTexturePtr
+      .asFunction<int Function(ffi.Pointer<ffi.Float>)>();
+
   late final _setCaptureFftSmoothingPtr =
       _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Float)>>(
           'setCaptureFftSmoothing');
   late final _setCaptureFftSmoothing =
       _setCaptureFftSmoothingPtr.asFunction<int Function(double)>();
+
+  CaptureErrors getFullWave(
+    ffi.Pointer<ffi.Float> samples,
+  ) {
+    int ret = _getFullWave(samples);
+    return CaptureErrors.values[ret];
+  }
+
+  late final _getFullWavePtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.Float>)>>(
+          'getFullWave');
+  late final _getFullWave =
+      _getFullWavePtr.asFunction<int Function(ffi.Pointer<ffi.Float>)>();
+
+  CaptureErrors getRecordedFrameCount(
+    ffi.Pointer<ffi.Int> frameCount,
+  ) {
+    int ret = _getRecordedFrameCount(frameCount);
+    return CaptureErrors.values[ret];
+  }
+
+  late final _getRecordedFrameCountPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.Int>)>>(
+          'getRecordedFrameCount');
+  late final _getRecordedFrameCount = _getRecordedFrameCountPtr
+      .asFunction<int Function(ffi.Pointer<ffi.Int>)>();
 }
