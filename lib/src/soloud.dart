@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:ffi' as ffi;
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
@@ -352,6 +353,36 @@ class SoLoud {
     }
     printPlayerError('loadFile()', ret.error);
     return (error: ret.error, sound: ret.sound);
+  }
+
+  /// Load a new sound from memory to be played once or multiple times later
+  ///
+  /// [buffer] the buffer pointer cast as a char*
+  /// Returns PlayerErrors.noError if success and a new sound
+  ///
+  Future<({PlayerErrors error, SoundProps? sound})> loadFromMemory(
+       ffi.Pointer<ffi.Float> buffer, int hash, int length
+      ) async {
+    if (!isPlayerInited) {
+      return (error: PlayerErrors.engineNotInited, sound: null);
+    }
+    print("Sending buffer address ${buffer.address}");
+    _mainToIsolateStream?.send(
+      {
+        'event': MessageEvents.loadFromMemory,
+        'args': (buffer: buffer.address, hash: hash, length: length),
+      },
+    );
+    final ret = (await _waitForEvent(
+      MessageEvents.loadFromMemory,
+      (buffer: buffer.address, hash: hash, length: length),
+    )) as ({PlayerErrors error, int soundHash});
+    SoundProps sound = SoundProps(ret.soundHash);
+    if (ret.error == PlayerErrors.noError) {
+      activeSounds.add(sound);
+    }
+    printPlayerError('loadFromMemory()', ret.error);
+    return (error: ret.error, sound: sound);
   }
 
   /// Load a new waveform to be played once or multiple times later
@@ -878,7 +909,7 @@ class SoLoud {
       printPlayerError('getFullWave()', PlayerErrors.engineNotInited);
       return PlayerErrors.engineNotInited;
     }
-    final ret = SoLoudController().soLoudFFI.getFullWave(audioData);
+    final ret = SoLoudController().captureFFI.getFullWave(audioData);
     if (ret != PlayerErrors.noError || audioData.value == ffi.nullptr) {
       printPlayerError('getFullWave()', PlayerErrors.nullPointer);
       return PlayerErrors.nullPointer;
@@ -1045,8 +1076,8 @@ class SoLoud {
   ///
   /// Return [CaptureErrors.captureNoError] if no error.
   ///
-  CaptureErrors initCapture({int deviceID = -1}) {
-    final ret = SoLoudController().captureFFI.initCapture(deviceID);
+  CaptureErrors initCapture({int deviceID = -1, required ffi.Pointer<ffi.Float> buffer}) {
+    final ret = SoLoudController().captureFFI.initCapture(deviceID, buffer);
     printCaptureError('initCapture()', ret);
     if (ret == CaptureErrors.captureNoError) {
       isCaptureInited = true;

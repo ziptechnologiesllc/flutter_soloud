@@ -30,7 +30,7 @@ public:
     ///     If [deviceID] is -1, the default will be used
     /// @param deviceID 
     /// @return 
-    CaptureErrors init(int deviceID);
+    CaptureErrors init(int deviceID, float* bufferFromDart);
 
     /// @brief Must be called when there is no more need of the capture or when closing the app
     /// @return 
@@ -40,6 +40,7 @@ public:
     bool isStarted();
     CaptureErrors startCapture();
     CaptureErrors stopCapture();
+    void initializeBuffer(float* bufferFromDart);
 
     float *getWave();
     float *getFullWave();

@@ -17,6 +17,7 @@ final class _CaptureDevice extends ffi.Struct {
   external int isDefault;
 }
 
+
 /// FFI bindings to capture with miniaudio
 class FlutterCaptureFfi {
   /// Holds the symbol lookup function.
@@ -84,14 +85,14 @@ class FlutterCaptureFfi {
       void Function(ffi.Pointer<ffi.Pointer<_CaptureDevice>>, int)>();
 
   ///
-  CaptureErrors initCapture(int deviceID) {
-    final e = _initCapture(deviceID);
+  CaptureErrors initCapture(int deviceID, ffi.Pointer<ffi.Float> buffer) {
+    final e = _initCapture(deviceID, buffer);
     return CaptureErrors.values[e];
   }
 
   late final _initCapturePtr =
-      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Int)>>('initCapture');
-  late final _initCapture = _initCapturePtr.asFunction<int Function(int)>();
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Int, ffi.Pointer<ffi.Float>)>>('initCapture');
+  late final _initCapture = _initCapturePtr.asFunction<int Function(int, ffi.Pointer<ffi.Float>)>();
 
   void disposeCapture() {
     return _disposeCapture();
@@ -173,4 +174,18 @@ class FlutterCaptureFfi {
           'setCaptureFftSmoothing');
   late final _setCaptureFftSmoothing =
       _setCaptureFftSmoothingPtr.asFunction<int Function(double)>();
+
+  CaptureErrors getFullWave(
+      ffi.Pointer<ffi.Float> samples,
+      ) {
+    int ret = _getFullWave(samples);
+    return CaptureErrors.values[ret];
+  }
+
+  late final _getFullWavePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(ffi.Pointer<ffi.Float>)>>(
+      'getFullWave');
+  late final _getFullWave = _getFullWavePtr
+      .asFunction<int Function(ffi.Pointer<ffi.Float>)>();
 }

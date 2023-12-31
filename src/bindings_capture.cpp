@@ -45,9 +45,9 @@ FFI_PLUGIN_EXPORT void freeListCaptureDevices(struct CaptureDevice **devices, in
     }
 }
 
-FFI_PLUGIN_EXPORT enum CaptureErrors initCapture(int deviceID)
+FFI_PLUGIN_EXPORT enum CaptureErrors initCapture(int deviceID, float* bigBuffer)
 {
-    CaptureErrors res = capture.init(deviceID);
+    CaptureErrors res = capture.init(deviceID, bigBuffer);
     return res;
 }
 
@@ -78,8 +78,7 @@ FFI_PLUGIN_EXPORT enum CaptureErrors stopCapture()
 
 FFI_PLUGIN_EXPORT enum CaptureErrors getFullWave(float* wave)
 {
-    float *recording = capture.getFullWave();
-    memcpy(wave, recording, sizeof(float) * 441000);
+    wave = capture.getFullWave();
     return capture_noError;
 }
 

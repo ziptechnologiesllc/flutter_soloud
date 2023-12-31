@@ -2,7 +2,9 @@
 // ignore_for_file: unnecessary_breaks
 
 import 'dart:async';
+import 'dart:ffi' as ffi;
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_soloud/src/enums.dart';
@@ -116,6 +118,7 @@ enum MessageEvents {
   stopLoop,
   loop,
   loadFile,
+  loadFromMemory,
   loadWaveform,
   speechText,
   play,
@@ -126,6 +129,7 @@ enum MessageEvents {
 }
 
 /// definitions to be checked in main isolate
+typedef ArgsLoadFromMemory = ({int buffer, int hash, int length});
 typedef ArgsInitEngine = ();
 typedef ArgsDisposeEngine = ();
 typedef ArgsLoadFile = ({String completeFileName});
@@ -181,6 +185,14 @@ void audioIsolate(SendPort isolateToMainStream) {
     }
 
     switch (event['event']! as MessageEvents) {
+      case MessageEvents.loadFromMemory:
+        final args = event['args']! as ArgsLoadFromMemory;
+        print("Got pointer ${args.buffer}");
+        final ffi.Pointer<ffi.UnsignedChar> pointerToChar = ffi.Pointer<ffi.UnsignedChar>.fromAddress(args.buffer);
+        print("${pointerToChar}");
+        final ret = soLoudController.soLoudFFI.loadFromMemory(pointerToChar, args.hash, args.length);
+        isolateToMainStream.send({'event': event['event'], 'args': args, 'return': ret});
+        break;
       case MessageEvents.exitIsolate:
         mainToIsolateStream.close();
         soLoudController.soLoudFFI.dispose();

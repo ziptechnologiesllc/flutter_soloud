@@ -84,6 +84,18 @@ extern "C"
         return (PlayerErrors)player.loadFile(completeFileName, *hash);
     }
 
+    /// Load a new sound to be played once or multiple times later
+    ///
+    /// [completeFileName] the complete file path
+    /// [hash] return hash of the sound
+    /// Returns [PlayerErrors.noError] if success
+    FFI_PLUGIN_EXPORT enum PlayerErrors loadFromMemory(unsigned const char *buffer, unsigned int *hash, unsigned int *length)
+    {
+        if (!player.isInited())
+            return backendNotInited;
+        return (PlayerErrors)player.loadFromMemory(buffer, *hash, *length);
+    }
+
     /// Load a new waveform to be played once or multiple times later
     ///
     /// [waveform]  WAVE_SQUARE = 0,
