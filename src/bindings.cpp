@@ -89,11 +89,11 @@ extern "C"
     /// [completeFileName] the complete file path
     /// [hash] return hash of the sound
     /// Returns [PlayerErrors.noError] if success
-    FFI_PLUGIN_EXPORT enum PlayerErrors loadFromMemory(const float **buffer, unsigned int *hash, unsigned int *length)
+    FFI_PLUGIN_EXPORT enum PlayerErrors loadFromMemory(const float *buffer, unsigned int *hash, unsigned int *length)
     {
         if (!player.isInited())
             return backendNotInited;
-        return (PlayerErrors)player.loadFromMemory(&buffer, *hash, *length);
+        return (PlayerErrors)player.loadFromMemory(buffer, *hash, *length);
     }
 
     /// Load a new waveform to be played once or multiple times later

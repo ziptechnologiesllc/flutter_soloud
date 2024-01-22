@@ -142,7 +142,7 @@ PlayerErrors Player::loadFromMemory(const float *buffer, unsigned int &hash, uns
     sounds.back().get()->sound = std::make_unique<SoLoud::Wav>();
     sounds.back().get()->soundType = TYPE_WAV;
     SoLoud::result result =
-            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadRawWav(buffer, length, 44100.0f, 2, false, false);
+            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadMem(buffer, length, 44100.0f, 2, false, false);
     if (result != SoLoud::SO_NO_ERROR)
     {
         sounds.emplace_back();
