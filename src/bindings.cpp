@@ -93,7 +93,7 @@ extern "C"
     {
         if (!player.isInited())
             return backendNotInited;
-        return (PlayerErrors)player.loadFromMemory(buffer, *hash, *length);
+        return (PlayerErrors)player.loadFromMemory(*buffer, *hash, *length);
     }
 
     /// Load a new waveform to be played once or multiple times later
