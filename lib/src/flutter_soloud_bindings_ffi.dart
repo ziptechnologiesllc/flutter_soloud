@@ -139,7 +139,7 @@ class FlutterSoLoudFfi {
   /// [completeFileName] the complete file path
   /// [soundHash] return hash of the sound
   /// Returns [PlayerErrors.noError] if success
-  ({PlayerErrors error, int soundHash}) loadFromMemory(ffi.Pointer<ffi.UnsignedChar> buffer, int hash, int length ) {
+  ({PlayerErrors error, int soundHash}) loadFromMemory(ffi.Pointer<ffi.Float> buffer, int hash, int length ) {
     // ignore: omit_local_variable_types
     final ffi.Pointer<ffi.UnsignedInt> h =
     calloc(ffi.sizeOf<ffi.UnsignedInt>());
@@ -160,12 +160,12 @@ class FlutterSoLoudFfi {
   late final _loadFromMemoryPtr = _lookup<
       ffi.NativeFunction<
           ffi.Int32 Function(
-              ffi.Pointer<ffi.UnsignedChar>,
+              ffi.Pointer<ffi.Float>,
               ffi.Pointer<ffi.UnsignedInt>,
               ffi.Pointer<ffi.UnsignedInt>
               )>>('loadFromMemory');
   late final _loadFromMemory = _loadFromMemoryPtr.asFunction<
-      int Function(ffi.Pointer<ffi.UnsignedChar>, ffi.Pointer<ffi.UnsignedInt>, ffi.Pointer<ffi.UnsignedInt>)>();
+      int Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>, ffi.Pointer<ffi.UnsignedInt>)>();
 
   /// Load a new waveform to be played once or multiple times later
   ///

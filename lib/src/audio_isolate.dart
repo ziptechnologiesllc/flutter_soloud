@@ -188,7 +188,7 @@ void audioIsolate(SendPort isolateToMainStream) {
       case MessageEvents.loadFromMemory:
         final args = event['args']! as ArgsLoadFromMemory;
         print("Got pointer ${args.buffer}");
-        final ffi.Pointer<ffi.UnsignedChar> pointerToChar = ffi.Pointer<ffi.UnsignedChar>.fromAddress(args.buffer);
+        final ffi.Pointer<ffi.Float> pointerToChar = ffi.Pointer<ffi.Float>.fromAddress(args.buffer);
         print("${pointerToChar}");
         final ret = soLoudController.soLoudFFI.loadFromMemory(pointerToChar, args.hash, args.length);
         isolateToMainStream.send({'event': event['event'], 'args': args, 'return': ret});
