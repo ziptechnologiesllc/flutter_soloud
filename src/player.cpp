@@ -118,6 +118,7 @@ PlayerErrors Player::loadFile(const std::string &completeFileName, unsigned int 
     return (PlayerErrors)result;
 }
 
+
 PlayerErrors Player::loadFromMemory(float *buffer, unsigned int &hash, unsigned int &length)
 {
     if (!mInited)
@@ -142,7 +143,7 @@ PlayerErrors Player::loadFromMemory(float *buffer, unsigned int &hash, unsigned 
     sounds.back().get()->sound = std::make_unique<SoLoud::Wav>();
     sounds.back().get()->soundType = TYPE_WAV;
     SoLoud::result result =
-            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadRawWave(testBuffer, length);
+            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadRawWave(buffer, 441000, 44100.0f, 2, false, true);
     if (result != SoLoud::SO_NO_ERROR)
     {
         sounds.emplace_back();
