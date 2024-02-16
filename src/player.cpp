@@ -119,6 +119,29 @@ PlayerErrors Player::loadFile(const std::string &completeFileName, unsigned int 
 }
 
 
+char* gen_uuid() {
+    char v[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    //3fb17ebc-bc38-4939-bc8b-74f2443281d4
+    //8 dash 4 dash 4 dash 4 dash 12
+    static char buf[37] = {0};
+
+    //gen random for all spaces because lazy
+    for(int i = 0; i < 36; ++i) {
+        buf[i] = v[rand()%16];
+    }
+
+    //put dashes in place
+    buf[8] = '-';
+    buf[13] = '-';
+    buf[18] = '-';
+    buf[23] = '-';
+
+    //needs end byte
+    buf[36] = '\0';
+
+    return buf;
+}
+
 PlayerErrors Player::loadFromMemory(float *buffer, unsigned int &hash, unsigned int &length)
 {
     if (!mInited)
@@ -143,7 +166,7 @@ PlayerErrors Player::loadFromMemory(float *buffer, unsigned int &hash, unsigned 
     sounds.back().get()->sound = std::make_unique<SoLoud::Wav>();
     sounds.back().get()->soundType = TYPE_WAV;
     SoLoud::result result =
-            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadRawWave(buffer, 441000, 44100.0f, 2, false, true);
+            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadRawWave(buffer, 441000, 44100.0f, 1, false, true);
     if (result != SoLoud::SO_NO_ERROR)
     {
         sounds.emplace_back();

@@ -78,7 +78,7 @@ CaptureErrors Capture::init(int deviceID, float* bufferFromDart)
     if (deviceID != -1)
         deviceConfig.capture.pDeviceID = &pPlaybackInfos[deviceID].id;
     deviceConfig.capture.format = ma_format_f32;
-    deviceConfig.capture.channels = 2;
+    deviceConfig.capture.channels = 1;
     deviceConfig.sampleRate = 44100;
     deviceConfig.dataCallback = data_callback;
     deviceConfig.pUserData = nullptr;
@@ -134,8 +134,10 @@ CaptureErrors Capture::startCapture()
 
 CaptureErrors Capture::stopCapture()
 {
-    if (!mInited)
+    if (!mInited) {
         return capture_not_inited;
+
+    }
 
     ma_device_uninit(&device);
     mInited = false;
