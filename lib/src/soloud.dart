@@ -711,7 +711,7 @@ interface class SoLoud {
     if (ret.error == PlayerErrors.noError) {
       activeSounds.add(sound);
     }
-    printPlayerError('loadFromMemory()', ret.error);
+    _logPlayerError(ret.error, from: 'loadFromMemory()');
     return (error: ret.error, sound: sound);
   }
 
@@ -1275,12 +1275,12 @@ interface class SoLoud {
   ///
   PlayerErrors getRecordedFrameCount(ffi.Pointer<ffi.Int> frameCount) {
     if (!isPlayerInited || frameCount == ffi.nullptr) {
-      printPlayerError('getRecordedFrameCount()', PlayerErrors.engineNotInited);
+      _logPlayerError(PlayerErrors.engineNotInited, from: 'getRecordedFrameCount()');
       return PlayerErrors.engineNotInited;
     }
     final ret = SoLoudController().captureFFI.getRecordedFrameCount(frameCount);
     if (ret != PlayerErrors.noError || frameCount.value == ffi.nullptr) {
-      printPlayerError('getRecordedFrameCount()', PlayerErrors.nullPointer);
+      _logPlayerError(PlayerErrors.nullPointer,from: 'getRecordedFrameCount()');
       return PlayerErrors.nullPointer;
     }
     return PlayerErrors.noError;
@@ -1455,9 +1455,9 @@ interface class SoLoud {
       required ffi.Pointer<ffi.Int> recordHead}) {
     final ret =
         SoLoudController().captureFFI.initCapture(deviceID, buffer, recordHead);
-    _logCaptureError(ret,'initCapture()');
+    //_logCaptureError(ret,'initCapture()');
     if (ret == CaptureErrors.captureNoError) {
-      isCaptureInited = true;
+      //isCaptureInited = true;
       audioEvent.add(AudioEvent.captureStarted);
     }
 
@@ -1509,16 +1509,16 @@ interface class SoLoud {
   CaptureErrors getCaptureAudioTexture(
       ffi.Pointer<ffi.Float> audioData) {
     if (!isCaptureInited || audioData == ffi.nullptr) {
-      printCaptureError(
-          'getCaptureTexture()', CaptureErrors.captureNotInited);
+      //_logPlayerError(
+      //    'getCaptureTexture()', CaptureErrors.captureNotInited);
       return CaptureErrors.captureNotInited;
     }
 
     final ret =
     SoLoudController().captureFFI.getCaptureAudioTexture(audioData);
     if (ret != CaptureErrors.captureNoError || audioData.value == ffi.nullptr) {
-      printCaptureError(
-          'getCaptureTexture()', CaptureErrors.nullPointer);
+      //printCaptureError(
+      //    'getCaptureTexture()', CaptureErrors.nullPointer);
       return CaptureErrors.nullPointer;
     }
     return CaptureErrors.captureNoError;

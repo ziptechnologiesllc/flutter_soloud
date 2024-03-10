@@ -136,15 +136,15 @@ interface class SoLoudCapture {
 
   /// Deprecated alias of [initialize].
   @Deprecated('Use initialize() instead')
-  CaptureErrors initCapture({int deviceID = -1}) =>
-      initialize(deviceID: deviceID);
+  CaptureErrors initCapture({int deviceID = -1, required ffi.Pointer<ffi.Float> buffer, required ffi.Pointer<ffi.Int> recordHead}) =>
+      initialize(deviceID: deviceID, buffer: buffer, recordHead: recordHead);
 
   /// Initialize input device with [deviceID].
   ///
   /// Return [CaptureErrors.captureNoError] if no error.
   ///
-  CaptureErrors initialize({int deviceID = -1}) {
-    final ret = SoLoudController().captureFFI.initCapture(deviceID);
+  CaptureErrors initialize({int deviceID = -1, required ffi.Pointer<ffi.Float> buffer, required ffi.Pointer<ffi.Int> recordHead}) {
+    final ret = SoLoudController().captureFFI.initCapture(deviceID, buffer, recordHead);
     _logCaptureError(ret, from: 'initCapture() result');
     if (ret == CaptureErrors.captureNoError) {
       isCaptureInited = true;
