@@ -1076,7 +1076,7 @@ class SoLoud {
   ///
   /// Return [CaptureErrors.captureNoError] if no error.
   ///
-  CaptureErrors initCapture({int deviceID = -1, required ffi.Pointer<ffi.Float> buffer}) {
+  CaptureErrors initCapture({int deviceID = -1, required ffi.Pointer<ffi.Float> buffer, required ffi.Pointer<ffi.Int> recordHead}) {
     final ret = SoLoudController().captureFFI.initCapture(deviceID, buffer);
     printCaptureError('initCapture()', ret);
     if (ret == CaptureErrors.captureNoError) {

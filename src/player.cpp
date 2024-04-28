@@ -118,7 +118,7 @@ PlayerErrors Player::loadFile(const std::string &completeFileName, unsigned int 
     return (PlayerErrors)result;
 }
 
-PlayerErrors Player::loadFromMemory(const unsigned char &buffer, unsigned int &hash, unsigned int &length)
+PlayerErrors Player::loadFromMemory(const unsigned char *buffer, unsigned int &hash, unsigned int &length)
 {
     if (!mInited)
         return backendNotInited;
