@@ -73,7 +73,7 @@ extern "C"
         EM_ASM({
             if (Module.wasmWorker)
             {
-                console.log("EM_ASM posting message " + UTF8ToString($0) + 
+                console.log("EM_ASM posting message " + UTF8ToString($0) +
                     " with value " + $1);
                 // Send the message
                 Module.wasmWorker.postMessage(JSON.stringify({
@@ -281,7 +281,20 @@ extern "C"
         return player.get()->isInited() ? 1 : 0;
     }
 
-    /// Load a new sound to be played once or multiple times later.
+    /// Load a new sound to be played once or multiple times later from a buffer
+    ///
+    /// [buffer] pointer to a float array
+    /// [hash] return hash of the sound
+    /// [length] number of frames from buffer to load as new sound
+    /// Returns [PlayerErrors.noError] if success
+    FFI_PLUGIN_EXPORT enum PlayerErrors loadMemory(float *buffer, unsigned int *hash, unsigned int *length)
+    {
+        if (!player.get()->isInited())
+            return backendNotInited;
+        return (PlayerErrors) player.get()->loadMemory(buffer, *hash, *length);
+    }
+
+    /// Load a new sound to be played once or multiple times later
     ///
     /// After loading the file, the [fileLoadedCallback] will call the
     /// Dart function defined with [setDartEventCallback] which gives back

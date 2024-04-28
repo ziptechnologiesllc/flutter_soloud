@@ -308,6 +308,51 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
   );
   late final _isInited = _isInitedPtr.asFunction<int Function()>();
 
+
+  /// Load a new sound to be played once or multiple times later
+  ///
+  /// [completeFileName] the complete file path
+  /// [soundHash] return hash of the sound
+  /// Returns [PlayerErrors.noError] if success
+  ({PlayerErrors error, SoundHash soundHash}) loadMemory(ffi.Pointer<ffi.Float> buffer, int hash, ffi.Pointer<ffi.UnsignedInt> length ) {
+    // ignore: omit_local_variable_types
+    final ffi.Pointer<ffi.UnsignedInt> h =
+    calloc(ffi.sizeOf<ffi.UnsignedInt>());
+
+    final e = _loadMemory(
+        buffer,
+        h,
+        length
+    );
+    SoundHash soundHash = SoundHash(h.value);
+    final ret = (error: PlayerErrors.values[e], soundHash: soundHash);
+    calloc.free(h);
+    return ret;
+  }
+
+  late final _loadMemoryPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(
+              ffi.Pointer<ffi.Float>,
+              ffi.Pointer<ffi.UnsignedInt>,
+              ffi.Pointer<ffi.UnsignedInt>
+              )>>('loadMemory');
+  late final _loadMemory = _loadMemoryPtr.asFunction<
+      int Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>, ffi.Pointer<ffi.UnsignedInt>)>();
+
+
+  /// Load a new sound to be played once or multiple times later.
+  ///
+  /// [completeFileName] the complete file path.
+  /// [LoadMode] if `LoadMode.memory`, Soloud::wav will be used which loads
+  /// all audio data into memory. Used to prevent gaps or lags
+  /// when seeking/starting a sound (less CPU, more memory allocated).
+  /// If `LoadMode.disk` is used, the audio data is loaded
+  /// from the given file when needed (more CPU, less memory allocated).
+  /// See the [seek] note problem when using [LoadMode] = `LoadMode.disk`.
+  /// `soundHash` return hash of the sound.
+  /// Returns [PlayerErrors.noError] if success.
+  ({PlayerErrors error, SoundHash soundHash})
   /// After loading the file, the [_fileLoadedCallback] will call the
   /// Dart function defined with [_setDartEventCallback] which gives back
   /// the error and the new hash.

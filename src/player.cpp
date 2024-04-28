@@ -14,6 +14,8 @@
 #include <stddef.h> // for size_t
 #else
 #include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
 #endif
 
 
@@ -198,6 +200,38 @@ const std::string Player::getErrorString(PlayerErrors errorCode) const
         return "error: no playback devices found!";
     }
     return "Other error";
+}
+
+PlayerErrors Player::loadMemory(float *buffer, unsigned int &hash, unsigned int &length)
+{
+    if (!mInited)
+        return backendNotInited;
+    char bufferString [33];
+    snprintf(bufferString, 33, "%d", buffer);
+
+    unsigned int newHash = (unsigned int)std::hash<std::string>{}(bufferString);
+    /// check if the sound has been already loaded
+    auto const &s = std::find_if(
+            sounds.begin(), sounds.end(),
+            [&](std::unique_ptr<ActiveSound> const &f)
+            { return f->soundHash == newHash; });
+    if (s != sounds.end()) {
+        hash = newHash;
+        return fileAlreadyLoaded;
+    }
+
+    sounds.push_back(std::make_unique<ActiveSound>());
+    sounds.back().get()->completeFileName = std::string(bufferString);
+    hash = sounds.back().get()->soundHash = newHash;
+    sounds.back().get()->sound = std::make_unique<SoLoud::Wav>();
+    sounds.back().get()->soundType = TYPE_WAV;
+    SoLoud::result result =
+            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadRawWave(buffer, length, 44100.0f, 1, false, true);
+    if (result != SoLoud::SO_NO_ERROR)
+    {
+        sounds.emplace_back();
+    }
+    return (PlayerErrors)result;
 }
 
 PlayerErrors Player::loadFile(
