@@ -527,6 +527,62 @@ interface class SoLoud {
   }
 
   /// Load a new sound to be played once or multiple times later, from
+  /// a buffer in memory.
+  ///
+  /// Provide a pointer to a memory buffer
+  ///
+  /// Mode is always [LoadMode.memory]
+  ///
+  /// Returns the new sound as [AudioSource].
+  ///
+  /// Throws [SoLoudNotInitializedException] if the engine is not initialized.
+  ///
+  /// If the file is already loaded, this is a no-op (but a warning
+  /// will be produced in the log).
+  Future<AudioSource> loadMemory(
+      ffi.Pointer<ffi.Float> buffer, int hash, int length
+      ) async {
+    if (!isInitialized) {
+      throw const SoLoudNotInitializedException();
+    }
+    _mainToIsolateStream?.send(
+      {
+        'event': MessageEvents.loadMemory,
+        'args': (bufferPointerAddress: buffer.address),
+      }
+    );
+    final ret = (await _waitForEvent(
+      MessageEvents.loadMemory,
+      (bufferPointerAddress: buffer.address),
+    )) as ({PlayerErrors error, AudioSource? sound});
+
+    _logPlayerError(ret.error, from: 'loadMemory() result');
+
+    if (ret.error == PlayerErrors.noError) {
+      assert(
+      ret.sound != null, 'loadFile() returned no sound despite no error');
+      _activeSounds.add(ret.sound!);
+      return ret.sound!;
+    } else if (ret.error == PlayerErrors.fileAlreadyLoaded) {
+      _log.warning(() => "Sound '${buffer.address}' was already loaded. "
+          'Prefer loading only once, and reusing the loaded sound '
+          'when playing.');
+      // The `audio_isolate.dart` code has logic to find the already-loaded
+      // sound among active sounds. The sound should be here as well.
+      assert(
+      _activeSounds
+          .where((sound) => sound.soundHash == ret.sound!.soundHash)
+          .length ==
+          1,
+      'Sound is already loaded but missing from _activeSounds. '
+          'This is probably a bug in flutter_soloud, please file.');
+      return ret.sound!;
+    } else {
+      throw SoLoudCppException.fromPlayerError(ret.error);
+    }
+  }
+
+  /// Load a new sound to be played once or multiple times later, from
   /// the file system.
   ///
   /// Provide the complete [path] of the file to be played.
@@ -901,6 +957,8 @@ interface class SoLoud {
     }
     SoLoudController().soLoudFFI.setPause(handle, pause ? 1 : 0);
   }
+  
+
 
   /// Gets the pause state of a currently playing sound identified by [handle].
   ///

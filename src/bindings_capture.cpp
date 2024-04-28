@@ -45,9 +45,9 @@ FFI_PLUGIN_EXPORT void freeListCaptureDevices(struct CaptureDevice **devices, in
     }
 }
 
-FFI_PLUGIN_EXPORT enum CaptureErrors initCapture(int deviceID)
+FFI_PLUGIN_EXPORT enum CaptureErrors initCapture(int deviceID, float *buffer)
 {
-    CaptureErrors res = capture.init(deviceID);
+    CaptureErrors res = capture.init(deviceID, buffer);
     return res;
 }
 
@@ -76,6 +76,12 @@ FFI_PLUGIN_EXPORT enum CaptureErrors stopCapture()
     return capture.stopCapture();
 }
 
+
+FFI_PLUGIN_EXPORT enum CaptureErrors getFullWave(float* wave)
+{
+    wave = capture.getFullWave();
+    return capture_noError;
+}
 
 FFI_PLUGIN_EXPORT void getCaptureTexture(float* samples)
 {

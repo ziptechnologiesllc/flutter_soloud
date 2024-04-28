@@ -125,6 +125,40 @@ class FlutterSoLoudFfi {
   );
   late final _isInited = _isInitedPtr.asFunction<int Function()>();
 
+  /// Load a new sound to be played once or multiple times later
+  ///
+  /// [completeFileName] the complete file path
+  /// [soundHash] return hash of the sound
+  /// Returns [PlayerErrors.noError] if success
+  ({PlayerErrors error, int soundHash}) loadMemory(ffi.Pointer<ffi.Float> buffer, int hash, int length ) {
+    // ignore: omit_local_variable_types
+    final ffi.Pointer<ffi.UnsignedInt> h =
+    calloc(ffi.sizeOf<ffi.UnsignedInt>());
+    final ffi.Pointer<ffi.UnsignedInt> l =
+    calloc(ffi.sizeOf<ffi.UnsignedInt>());
+
+    final e = _loadMemory(
+        buffer,
+        h,
+        l
+    );
+    final ret = (error: PlayerErrors.values[e], soundHash: h.value);
+    calloc.free(h);
+    calloc.free(l);
+    return ret;
+  }
+
+  late final _loadMemoryPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(
+              ffi.Pointer<ffi.Float>,
+              ffi.Pointer<ffi.UnsignedInt>,
+              ffi.Pointer<ffi.UnsignedInt>
+              )>>('loadMemory');
+  late final _loadMemory = _loadMemoryPtr.asFunction<
+      int Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>, ffi.Pointer<ffi.UnsignedInt>)>();
+
+
   /// Load a new sound to be played once or multiple times later.
   ///
   /// [completeFileName] the complete file path.

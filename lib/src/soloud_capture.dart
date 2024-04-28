@@ -84,17 +84,17 @@ interface class SoLoudCapture {
   /// Return [CaptureErrors.captureNoError] if no error.
   ///
   CaptureErrors getCaptureAudioTexture2D(
-    ffi.Pointer<ffi.Pointer<ffi.Float>> audioData,
-  ) {
+      ffi.Pointer<ffi.Pointer<ffi.Float>> audioData,) {
     if (!isCaptureInited || audioData == ffi.nullptr) {
       _log.severe(
-        () => 'getCaptureAudioTexture2D(): ${CaptureErrors.captureNotInited}',
+            () => 'getCaptureAudioTexture2D(): ${CaptureErrors
+            .captureNotInited}',
       );
       return CaptureErrors.captureNotInited;
     }
 
     final ret =
-        SoLoudController().captureFFI.getCaptureAudioTexture2D(audioData);
+    SoLoudController().captureFFI.getCaptureAudioTexture2D(audioData);
     _logCaptureError(ret, from: 'getCaptureAudioTexture2D() result');
 
     if (ret != CaptureErrors.captureNoError) {
@@ -110,12 +110,13 @@ interface class SoLoudCapture {
     return CaptureErrors.captureNoError;
   }
 
-  /// Initialize input device with [deviceID].
+  /// Initialize input device with [deviceID] and [buffer].
   ///
   /// Return [CaptureErrors.captureNoError] if no error.
   ///
-  CaptureErrors initialize({int deviceID = -1}) {
-    final ret = SoLoudController().captureFFI.initCapture(deviceID);
+  CaptureErrors initialize(
+      {int deviceID = -1, required ffi.Pointer<ffi.Float> buffer}) {
+    final ret = SoLoudController().captureFFI.initCapture(deviceID, buffer);
     _logCaptureError(ret, from: 'initCapture() result');
     if (ret == CaptureErrors.captureNoError) {
       isCaptureInited = true;
@@ -185,6 +186,15 @@ interface class SoLoudCapture {
     return ret;
   }
 
+  CaptureErrors getFullWave(ffi.Pointer<ffi.Float> buffer) {
+    final ret = SoLoudController().captureFFI.getFullWave(buffer);
+    _logCaptureError(ret, from: 'getFullWave() result');
+    if (ret == CaptureErrors.captureNoError) {
+      isCaptureInited = false;
+    }
+    return ret;
+  }
+
   /// Utility method that logs a [Level.SEVERE] message if [captureError]
   /// is anything other than [CaptureErrors.captureNoError].
   ///
@@ -217,4 +227,21 @@ interface class SoLoudCapture {
     strBuf.write(captureError.toString());
     _log.severe(strBuf.toString());
   }
+
+  CaptureErrors getCaptureAudioTexture(ffi.Pointer<ffi.Float> audioData) {
+    if (!isCaptureInited || audioData == ffi.nullptr) {
+      _logCaptureError(CaptureErrors.captureNotInited,from: 'getCaptureTexture() result');
+      return CaptureErrors.captureNotInited;
+    }
+
+    final ret =
+    SoLoudController().captureFFI.getCaptureAudioTexture(audioData);
+    if (ret != CaptureErrors.captureNoError || audioData.value == ffi.nullptr) {
+      _logCaptureError(
+          CaptureErrors.nullPointer, from: 'getCaptureTexture() result');
+      return CaptureErrors.nullPointer;
+    }
+    return CaptureErrors.captureNoError;
+  }
+
 }

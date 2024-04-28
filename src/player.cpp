@@ -14,6 +14,8 @@
 #include <stddef.h> // for size_t
 #else
 #include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
 #endif
 
 Player::Player() : mInited(false), mFilters(&soloud){};
@@ -100,6 +102,38 @@ const std::string Player::getErrorString(PlayerErrors errorCode) const
         return "error: the player is already initialized!";
     }
     return "Other error";
+}
+
+PlayerErrors Player::loadMemory(const unsigned char *buffer, unsigned int &hash, unsigned int &length)
+{
+    if (!mInited)
+        return backendNotInited;
+    char bufferString [33];
+    strcpy(bufferString, itoa(*buffer, bufferString, 10));
+
+    unsigned int newHash = (unsigned int)std::hash<std::string>{}(bufferString);
+    /// check if the sound has been already loaded
+    auto const &s = std::find_if(
+            sounds.begin(), sounds.end(),
+            [&](std::unique_ptr<ActiveSound> const &f)
+            { return f->soundHash == newHash; });
+    if (s != sounds.end()) {
+        hash = newHash;
+        return fileAlreadyLoaded;
+    }
+
+    sounds.push_back(std::make_unique<ActiveSound>());
+    sounds.back().get()->completeFileName = std::string(bufferString);
+    hash = sounds.back().get()->soundHash = newHash;
+    sounds.back().get()->sound = std::make_unique<SoLoud::Wav>();
+    sounds.back().get()->soundType = TYPE_WAV;
+    SoLoud::result result =
+            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadMem(buffer, length, false, false);
+    if (result != SoLoud::SO_NO_ERROR)
+    {
+        sounds.emplace_back();
+    }
+    return (PlayerErrors)result;
 }
 
 PlayerErrors Player::loadFile(

@@ -5,8 +5,12 @@
 #include <memory.h>
 
 #define CAPTURE_BUFFER_SIZE 1024
+#define BIG_BUFFER_SIZE 44100 * 10
 
+int currentFrame = 0;
 float capturedBuffer[CAPTURE_BUFFER_SIZE];
+float *bigBuffer;
+
 void data_callback(ma_device *pDevice, void *pOutput, const void *pInput, ma_uint32 frameCount)
 {
     // Process the captured audio data as needed
@@ -16,6 +20,8 @@ void data_callback(ma_device *pDevice, void *pOutput, const void *pInput, ma_uin
     // printf("framecount: %d\n", frameCount);
 
     memcpy(capturedBuffer, captured, sizeof(float) * CAPTURE_BUFFER_SIZE);
+    memcpy(&bigBuffer[CAPTURE_BUFFER_SIZE * currentFrame], captured, sizeof(float) * CAPTURE_BUFFER_SIZE);
+    currentFrame++;
 }
 
 Capture::Capture() : mInited(false){};
@@ -63,7 +69,7 @@ std::vector<CaptureDevice> Capture::listCaptureDevices()
     return ret;
 }
 
-CaptureErrors Capture::init(int deviceID)
+CaptureErrors Capture::init(int deviceID, float* bufferFromDart)
 {
     if (mInited) return capture_init_failed;
     deviceConfig = ma_device_config_init(ma_device_type_capture);
@@ -82,8 +88,14 @@ CaptureErrors Capture::init(int deviceID)
         printf("Failed to initialize capture device.\n");
         return capture_init_failed;
     }
+    initializeBuffer(bufferFromDart);
     mInited = true;
     return capture_noError;
+}
+
+void Capture::initializeBuffer(float* bufferFromDart)
+{
+    bigBuffer = (float *) bufferFromDart;
 }
 
 void Capture::dispose()
@@ -141,4 +153,15 @@ float *Capture::getWave()
                       n;
     }
     return waveData;
+}
+
+
+float *Capture::getFullWave()
+{
+    return bigBuffer;
+}
+
+int *Capture::getRecordedFrameCount()
+{
+    return &currentFrame;
 }

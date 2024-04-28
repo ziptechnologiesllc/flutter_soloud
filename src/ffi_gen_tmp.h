@@ -22,7 +22,7 @@ struct CaptureDevice
 #define FFI_PLUGIN_EXPORT
 
 //--------------------- copy here the new functions to generate
-
+FFI_PLUGIN_EXPORT float* getFullWave();
 
 /// Returns the number of concurrent sounds that are playing at the moment.
 FFI_PLUGIN_EXPORT unsigned int getActiveVoiceCount();

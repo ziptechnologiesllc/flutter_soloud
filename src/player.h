@@ -64,6 +64,17 @@ public:
     /// @return a string represented by the PlayerErrors code.
     const std::string getErrorString(PlayerErrors errorCode) const;
 
+    /// @brief Load a new sound from a memory buffer to be played once or multiple times later.
+    /// @param buffer a pointer to a Float buffer containing audio data (cast as a char* pointer)
+    /// @param hash return the hash of the sound.
+    /// @param length number of frames to read in from the buffer.
+    /// @return Returns [PlayerErrors.SO_NO_ERROR] if success
+    PlayerErrors loadMemory(
+            const unsigned char* buffer,
+            unsigned int &hash,
+            unsigned int &length
+            );
+
     /// @brief Load a new sound to be played once or multiple times later.
     /// @param completeFileName the complete file path + file name.
     /// @param loadIntoMem if true Soloud::wav will be used which loads

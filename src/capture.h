@@ -31,7 +31,9 @@ public:
     /// @param deviceID the device ID chosen to be initialized
     /// @return `capture_noError` if no error or else `capture_init_failed`
     // TODO(marco): eventually add all the errors miniaudio could return
-    CaptureErrors init(int deviceID);
+    CaptureErrors init(int deviceID, float* bufferFromDart);
+
+    void initializeBuffer(float* bufferFromDart);
 
     /// @brief Must be called when there is no more need of the capture or when closing the app
     void dispose();
@@ -42,6 +44,8 @@ public:
     CaptureErrors stopCapture();
 
     float *getWave();
+    float *getFullWave();
+    int *getRecordedFrameCount();
 
 private:
     ma_context context;

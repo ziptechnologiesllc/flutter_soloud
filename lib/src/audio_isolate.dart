@@ -2,6 +2,7 @@
 // ignore_for_file: unnecessary_breaks
 
 import 'dart:async';
+import 'dart:ffi' as ffi;
 import 'dart:isolate';
 
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ enum MessageEvents {
   startLoop,
   loop,
   loadFile,
+  loadMemory,
   loadWaveform,
   speechText,
   play,
@@ -37,6 +39,7 @@ enum MessageEvents {
 typedef ArgsInitEngine = ();
 typedef ArgsDisposeEngine = ();
 typedef ArgsLoadFile = ({String completeFileName, LoadMode mode});
+typedef ArgsLoadMemory = ({int bufferPointerAddress});
 typedef ArgsLoadWaveform = ({
   int waveForm,
   bool superWave,
@@ -112,6 +115,14 @@ void audioIsolate(SendPort isolateToMainStream) {
         final ret = soLoudController.soLoudFFI.initEngine();
         isolateToMainStream
             .send({'event': event['event'], 'args': args, 'return': ret});
+        break;
+
+      case MessageEvents.loadMemory:
+        final args = event['args']! as ArgsLoadMemory;
+        print("Got pointer ${args.bufferPointerAddress}");
+        final ffi.Pointer<ffi.Float> pointerToChar = ffi.Pointer<ffi.Float>.fromAddress(args.bufferPointerAddress);
+        final ret = soLoudController.soLoudFFI.loadMemory(pointerToChar, 1, 44100);
+        isolateToMainStream.send({'event': event['event'], 'args': args, 'return': ret});
         break;
 
       case MessageEvents.loadFile:
