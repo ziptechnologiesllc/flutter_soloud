@@ -76,6 +76,25 @@ FFI_PLUGIN_EXPORT enum CaptureErrors stopCapture()
     return capture.stopCapture();
 }
 
+FFI_PLUGIN_EXPORT enum CaptureErrors getRecordedFrameCount(int* frameCount)
+{
+    frameCount = capture.getRecordedFrameCount();
+    return capture_noError;
+}
+
+
+FFI_PLUGIN_EXPORT enum CaptureErrors getCaptureAudioTexture(float* samples)
+{
+    if (analyzerCapture.get() == nullptr || !capture.isInited()) {
+        memset(samples,0, sizeof(float) * 256);
+        return capture_not_inited;
+    }
+    float *wave = capture.getWave();
+
+    memcpy(samples, wave, sizeof(float) * 256);
+    return capture_noError;
+}
+
 
 FFI_PLUGIN_EXPORT enum CaptureErrors getFullWave(float* wave)
 {
