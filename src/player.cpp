@@ -104,12 +104,12 @@ const std::string Player::getErrorString(PlayerErrors errorCode) const
     return "Other error";
 }
 
-PlayerErrors Player::loadMemory(const unsigned char *buffer, unsigned int &hash, unsigned int &length)
+PlayerErrors Player::loadMemory(float *buffer, unsigned int &hash, unsigned int &length)
 {
     if (!mInited)
         return backendNotInited;
     char bufferString [33];
-    strcpy(bufferString, itoa(*buffer, bufferString, 10));
+    snprintf(bufferString, 33, "%d", buffer);
 
     unsigned int newHash = (unsigned int)std::hash<std::string>{}(bufferString);
     /// check if the sound has been already loaded
@@ -128,7 +128,7 @@ PlayerErrors Player::loadMemory(const unsigned char *buffer, unsigned int &hash,
     sounds.back().get()->sound = std::make_unique<SoLoud::Wav>();
     sounds.back().get()->soundType = TYPE_WAV;
     SoLoud::result result =
-            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadMem(buffer, length, false, false);
+            static_cast<SoLoud::Wav*>(sounds.back().get()->sound.get())->loadRawWave(buffer, 441000, 44100.0f, 1, false, false);
     if (result != SoLoud::SO_NO_ERROR)
     {
         sounds.emplace_back();

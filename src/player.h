@@ -70,7 +70,7 @@ public:
     /// @param length number of frames to read in from the buffer.
     /// @return Returns [PlayerErrors.SO_NO_ERROR] if success
     PlayerErrors loadMemory(
-            const unsigned char* buffer,
+            float *buffer,
             unsigned int &hash,
             unsigned int &length
             );

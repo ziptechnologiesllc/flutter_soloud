@@ -92,7 +92,7 @@ extern "C"
     /// [hash] return hash of the sound
     /// [length] number of frames from buffer to load as new sound
     /// Returns [PlayerErrors.noError] if success
-    FFI_PLUGIN_EXPORT enum PlayerErrors loadMemory(unsigned const char *buffer, unsigned int *hash, unsigned int *length)
+    FFI_PLUGIN_EXPORT enum PlayerErrors loadMemory(float *buffer, unsigned int *hash, unsigned int *length)
     {
         if (!player.get()->isInited())
             return backendNotInited;
