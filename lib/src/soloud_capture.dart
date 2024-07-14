@@ -195,6 +195,12 @@ interface class SoLoudCapture {
     return ret;
   }
 
+  CaptureErrors getRecordedFrameCount(ffi.Pointer<ffi.Int> frameCount) {
+    final ret = SoLoudController().captureFFI.getRecordedFrameCount(frameCount);
+    _logCaptureError(ret, from: 'getRecordedFrameCount() result');
+    return ret;
+  }
+
   /// Utility method that logs a [Level.SEVERE] message if [captureError]
   /// is anything other than [CaptureErrors.captureNoError].
   ///

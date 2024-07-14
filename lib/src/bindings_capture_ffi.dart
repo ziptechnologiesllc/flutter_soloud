@@ -149,13 +149,7 @@ class FlutterCaptureFfi {
   late final _getFullWave =
   _getFullWavePtr.asFunction<int Function(ffi.Pointer<ffi.Float>)>();
 
-  CaptureErrors getCaptureAudioTexture2D(
-      ffi.Pointer<ffi.Pointer<ffi.Float>> samples,) {
-    int ret = _getCaptureAudioTexture2D(samples);
-    return CaptureErrors.values[ret];
-  }
-
-  CaptureErrors getRecordedFrameCount(ffi.Pointer<ffi.Int> frameCount,) {
+  CaptureErrors getRecordedFrameCount(ffi.Pointer<ffi.Int> frameCount) {
     int ret = _getRecordedFrameCount(frameCount);
     return CaptureErrors.values[ret];
   }
@@ -165,6 +159,13 @@ class FlutterCaptureFfi {
       'getRecordedFrameCount');
   late final _getRecordedFrameCount = _getRecordedFrameCountPtr
       .asFunction<int Function(ffi.Pointer<ffi.Int>)>();
+
+
+  CaptureErrors getCaptureAudioTexture2D(
+      ffi.Pointer<ffi.Pointer<ffi.Float>> samples,) {
+    int ret = _getCaptureAudioTexture2D(samples);
+    return CaptureErrors.values[ret];
+  }
 
   late final _getCaptureAudioTexture2DPtr = _lookup<
       ffi.NativeFunction<

@@ -548,7 +548,7 @@ interface class SoLoud {
     _mainToIsolateStream?.send(
       {
         'event': MessageEvents.loadMemory,
-        'args': (bufferPointerAddress: buffer.address),
+        'args': (bufferPointerAddress: buffer.address, length: length),
       }
     );
     final ret = (await _waitForEvent(
@@ -560,7 +560,7 @@ interface class SoLoud {
 
     if (ret.error == PlayerErrors.noError) {
       assert(
-      ret.sound != null, 'loadFile() returned no sound despite no error');
+      ret.sound != null, 'loadMemory() returned no sound despite no error');
       _activeSounds.add(ret.sound!);
       return ret.sound!;
     } else if (ret.error == PlayerErrors.fileAlreadyLoaded) {
