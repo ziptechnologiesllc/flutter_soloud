@@ -122,7 +122,11 @@ void audioIsolate(SendPort isolateToMainStream) {
         print("Got pointer ${args.bufferPointerAddress}");
         final ffi.Pointer<ffi.Float> pointerToChar = ffi.Pointer<ffi.Float>.fromAddress(args.bufferPointerAddress);
         final ret = soLoudController.soLoudFFI.loadMemory(pointerToChar, 1, 44100);
-        isolateToMainStream.send({'event': event['event'], 'args': args, 'return': ret});
+        AudioSource? newSound;
+        newSound = AudioSource(ret.soundHash);
+        activeSounds.add(newSound);
+        isolateToMainStream.send({'event': event['event'], 'args': args, 'return': (error: ret.error, sound: newSound)
+        });
         break;
 
       case MessageEvents.loadFile:

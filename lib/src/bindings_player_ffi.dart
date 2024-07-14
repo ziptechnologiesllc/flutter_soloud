@@ -130,7 +130,7 @@ class FlutterSoLoudFfi {
   /// [completeFileName] the complete file path
   /// [soundHash] return hash of the sound
   /// Returns [PlayerErrors.noError] if success
-  ({PlayerErrors error, int soundHash}) loadMemory(ffi.Pointer<ffi.Float> buffer, int hash, int length ) {
+  ({PlayerErrors error, SoundHash soundHash}) loadMemory(ffi.Pointer<ffi.Float> buffer, int hash, int length ) {
     // ignore: omit_local_variable_types
     final ffi.Pointer<ffi.UnsignedInt> h =
     calloc(ffi.sizeOf<ffi.UnsignedInt>());
@@ -142,7 +142,8 @@ class FlutterSoLoudFfi {
         h,
         l
     );
-    final ret = (error: PlayerErrors.values[e], soundHash: h.value);
+    SoundHash soundHash = SoundHash(h.value);
+    final ret = (error: PlayerErrors.values[e], soundHash: soundHash);
     calloc.free(h);
     calloc.free(l);
     return ret;
