@@ -115,8 +115,8 @@ interface class SoLoudCapture {
   /// Return [CaptureErrors.captureNoError] if no error.
   ///
   CaptureErrors initialize(
-      {int deviceID = -1, required ffi.Pointer<ffi.Float> buffer}) {
-    final ret = SoLoudController().captureFFI.initCapture(deviceID, buffer);
+      {int deviceID = -1, required ffi.Pointer<ffi.Float> buffer, required ffi.Pointer<ffi.UnsignedInt> lengthPointer}) {
+    final ret = SoLoudController().captureFFI.initCapture(deviceID, buffer, lengthPointer);
     _logCaptureError(ret, from: 'initCapture() result');
     if (ret == CaptureErrors.captureNoError) {
       isCaptureInited = true;
@@ -195,7 +195,7 @@ interface class SoLoudCapture {
     return ret;
   }
 
-  CaptureErrors getRecordedFrameCount(ffi.Pointer<ffi.Int> frameCount) {
+  CaptureErrors getRecordedFrameCount(ffi.Pointer<ffi.UnsignedInt> frameCount) {
     final ret = SoLoudController().captureFFI.getRecordedFrameCount(frameCount);
     _logCaptureError(ret, from: 'getRecordedFrameCount() result');
     return ret;

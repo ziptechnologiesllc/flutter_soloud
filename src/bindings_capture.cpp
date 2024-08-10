@@ -45,9 +45,9 @@ FFI_PLUGIN_EXPORT void freeListCaptureDevices(struct CaptureDevice **devices, in
     }
 }
 
-FFI_PLUGIN_EXPORT enum CaptureErrors initCapture(int deviceID, float *buffer)
+FFI_PLUGIN_EXPORT enum CaptureErrors initCapture(int deviceID, float *buffer, unsigned int *lengthPointer)
 {
-    CaptureErrors res = capture.init(deviceID, buffer);
+    CaptureErrors res = capture.init(deviceID, buffer, lengthPointer);
     return res;
 }
 
@@ -76,7 +76,7 @@ FFI_PLUGIN_EXPORT enum CaptureErrors stopCapture()
     return capture.stopCapture();
 }
 
-FFI_PLUGIN_EXPORT enum CaptureErrors getRecordedFrameCount(int* frameCount)
+FFI_PLUGIN_EXPORT enum CaptureErrors getRecordedFrameCount(unsigned int* frameCount)
 {
     frameCount = capture.getRecordedFrameCount();
     return capture_noError;

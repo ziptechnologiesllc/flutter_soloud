@@ -84,17 +84,17 @@ class FlutterCaptureFfi {
       void Function(ffi.Pointer<ffi.Pointer<_CaptureDevice>>, int)>();
 
   ///
-  CaptureErrors initCapture(int deviceID, ffi.Pointer<ffi.Float> buffer) {
-    final e = _initCapture(deviceID, buffer);
+  CaptureErrors initCapture(int deviceID, ffi.Pointer<ffi.Float> buffer, ffi.Pointer<ffi.UnsignedInt> lengthPointer) {
+    final e = _initCapture(deviceID, buffer, lengthPointer);
     return CaptureErrors.values[e];
   }
 
   late final _initCapturePtr =
   _lookup<
-      ffi.NativeFunction<ffi.Int32 Function(ffi.Int, ffi.Pointer<ffi.Float>)>>(
+      ffi.NativeFunction<ffi.Int32 Function(ffi.Int, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>)>>(
       'initCapture');
   late final _initCapture = _initCapturePtr.asFunction<
-      int Function(int, ffi.Pointer<ffi.Float>)>();
+      int Function(int, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>)>();
 
   void disposeCapture() {
     return _disposeCapture();
@@ -149,16 +149,16 @@ class FlutterCaptureFfi {
   late final _getFullWave =
   _getFullWavePtr.asFunction<int Function(ffi.Pointer<ffi.Float>)>();
 
-  CaptureErrors getRecordedFrameCount(ffi.Pointer<ffi.Int> frameCount) {
+  CaptureErrors getRecordedFrameCount(ffi.Pointer<ffi.UnsignedInt> frameCount) {
     int ret = _getRecordedFrameCount(frameCount);
     return CaptureErrors.values[ret];
   }
 
   late final _getRecordedFrameCountPtr =
-  _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.Int>)>>(
+  _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.UnsignedInt>)>>(
       'getRecordedFrameCount');
   late final _getRecordedFrameCount = _getRecordedFrameCountPtr
-      .asFunction<int Function(ffi.Pointer<ffi.Int>)>();
+      .asFunction<int Function(ffi.Pointer<ffi.UnsignedInt>)>();
 
 
   CaptureErrors getCaptureAudioTexture2D(

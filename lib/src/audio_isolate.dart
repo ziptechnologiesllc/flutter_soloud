@@ -39,7 +39,7 @@ enum MessageEvents {
 typedef ArgsInitEngine = ();
 typedef ArgsDisposeEngine = ();
 typedef ArgsLoadFile = ({String completeFileName, LoadMode mode});
-typedef ArgsLoadMemory = ({int bufferPointerAddress, int length});
+typedef ArgsLoadMemory = ({int bufferPointerAddress, int lengthPointerAddress});
 typedef ArgsLoadWaveform = ({
   int waveForm,
   bool superWave,
@@ -119,9 +119,10 @@ void audioIsolate(SendPort isolateToMainStream) {
 
       case MessageEvents.loadMemory:
         final args = event['args']! as ArgsLoadMemory;
-        print("Got pointer ${args.bufferPointerAddress} and length ${args.length}");
+        print("Got buffer pointer ${args.bufferPointerAddress} and length ${args.lengthPointerAddress}");
         final ffi.Pointer<ffi.Float> pointerToChar = ffi.Pointer<ffi.Float>.fromAddress(args.bufferPointerAddress);
-        final ret = soLoudController.soLoudFFI.loadMemory(pointerToChar, 1, args.length);
+        final ffi.Pointer<ffi.UnsignedInt> lengthPointer = ffi.Pointer<ffi.UnsignedInt>.fromAddress(args.lengthPointerAddress);
+        final ret = soLoudController.soLoudFFI.loadMemory(pointerToChar, 1, lengthPointer);
         AudioSource? newSound;
         newSound = AudioSource(ret.soundHash);
         activeSounds.add(newSound);

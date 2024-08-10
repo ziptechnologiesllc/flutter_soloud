@@ -31,7 +31,7 @@ public:
     /// @param deviceID the device ID chosen to be initialized
     /// @return `capture_noError` if no error or else `capture_init_failed`
     // TODO(marco): eventually add all the errors miniaudio could return
-    CaptureErrors init(int deviceID, float* bufferFromDart);
+    CaptureErrors init(int deviceID, float* bufferFromDart, unsigned int* lengthPointer);
 
     void initializeBuffer(float* bufferFromDart);
 
@@ -45,7 +45,7 @@ public:
 
     float *getWave();
     float *getFullWave();
-    int *getRecordedFrameCount();
+    unsigned int *getRecordedFrameCount();
 
 private:
     ma_context context;

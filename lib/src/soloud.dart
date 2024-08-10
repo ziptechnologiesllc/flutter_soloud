@@ -540,7 +540,7 @@ interface class SoLoud {
   /// If the file is already loaded, this is a no-op (but a warning
   /// will be produced in the log).
   Future<AudioSource> loadMemory(
-      ffi.Pointer<ffi.Float> buffer, int hash, int length
+      ffi.Pointer<ffi.Float> buffer, int hash, ffi.Pointer<ffi.UnsignedInt> lengthPointer
       ) async {
     if (!isInitialized) {
       throw const SoLoudNotInitializedException();
@@ -548,12 +548,12 @@ interface class SoLoud {
     _mainToIsolateStream?.send(
       {
         'event': MessageEvents.loadMemory,
-        'args': (bufferPointerAddress: buffer.address, length: length),
+        'args': (bufferPointerAddress: buffer.address, lengthPointerAddress: lengthPointer.address),
       }
     );
     final ret = (await _waitForEvent(
       MessageEvents.loadMemory,
-      (bufferPointerAddress: buffer.address),
+      (bufferPointerAddress: buffer.address, lengthPointerAddress: lengthPointer.address)
     )) as ({PlayerErrors error, AudioSource? sound});
 
     _logPlayerError(ret.error, from: 'loadMemory() result');
