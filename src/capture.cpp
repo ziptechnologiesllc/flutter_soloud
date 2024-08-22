@@ -166,3 +166,21 @@ unsigned int *Capture::getRecordedFrameCount()
 {
     return currentFrame;
 }
+
+ma_uint64 Capture::writeBufferToWavFile(void *bufferPointer, ma_uint64 frameCount, const char* filePath)
+{
+    ma_encoder_config config = ma_encoder_config_init(ma_encoding_format_wav, ma_format_f32, 1, 44100);
+    ma_encoder encoder;
+    ma_result result = ma_encoder_init_file(filePath, &config, &encoder);
+    if (result != MA_SUCCESS) {
+        // Error
+    }
+
+    ma_uint64 framesWritten;
+    result = ma_encoder_write_pcm_frames(&encoder, bufferPointer, frameCount, &framesWritten);
+    if (result != MA_SUCCESS) {
+
+    }
+    return framesWritten;
+
+}

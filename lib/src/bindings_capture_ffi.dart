@@ -198,4 +198,15 @@ class FlutterCaptureFfi {
   late final _getCaptureAudioTexture = _getCaptureAudioTexturePtr
       .asFunction<int Function(ffi.Pointer<ffi.Float>)>();
 
+  CaptureErrors writeAudioBufferToWavFile(ffi.Pointer<ffi.Float> audioBuffer, ffi.Pointer<ffi.UnsignedInt> frameCount, ffi.Pointer<ffi.Int8> filePath) {
+    int ret = _writeAudioBufferToWavFile(audioBuffer, frameCount, filePath);
+    return CaptureErrors.values[ret];
+  }
+
+  late final _writeAudioBufferToWavFilePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>, ffi.Pointer<ffi.Int8>)>>(
+      'writeAudioBufferToWavFile');
+  late final _writeAudioBufferToWavFile = _writeAudioBufferToWavFilePtr
+      .asFunction<int Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>, ffi.Pointer<ffi.Int8>)>();
 }

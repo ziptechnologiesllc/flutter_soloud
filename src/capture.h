@@ -47,6 +47,8 @@ public:
     float *getFullWave();
     unsigned int *getRecordedFrameCount();
 
+    ma_uint64 writeBufferToWavFile(void* bufferPointer, ma_uint64 frameCount, const char* filePath);
+
 private:
     ma_context context;
     ma_device_info *pPlaybackInfos;

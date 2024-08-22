@@ -250,4 +250,16 @@ interface class SoLoudCapture {
     return CaptureErrors.captureNoError;
   }
 
+  CaptureErrors writeAudioBufferToWavFile(ffi.Pointer<ffi.Float> audioBuffer, ffi.Pointer<ffi.UnsignedInt> frameCount, ffi.Pointer<ffi.Int8> filePath) {
+
+    final ret =
+    SoLoudController().captureFFI.writeAudioBufferToWavFile(audioBuffer, frameCount, filePath);
+    if (ret != CaptureErrors.captureNoError || audioBuffer.value == ffi.nullptr) {
+      _logCaptureError(
+          CaptureErrors.nullPointer, from: 'writeAudioBufferToWavFile() result');
+      return CaptureErrors.nullPointer;
+    }
+    return CaptureErrors.captureNoError;
+  }
+
 }

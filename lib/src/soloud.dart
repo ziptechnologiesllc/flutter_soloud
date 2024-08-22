@@ -582,6 +582,7 @@ interface class SoLoud {
     }
   }
 
+
   /// Load a new sound to be played once or multiple times later, from
   /// the file system.
   ///
