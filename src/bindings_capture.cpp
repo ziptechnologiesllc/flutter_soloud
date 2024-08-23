@@ -139,7 +139,7 @@ FFI_PLUGIN_EXPORT enum CaptureErrors setCaptureFftSmoothing(float smooth)
 
 FFI_PLUGIN_EXPORT ma_uint64 writeAudioBufferToWavFile(float *bufferPointer, unsigned int* frameCount, const char* filePath)
 {
-    void *bufferPointerAsVoid = (void *) &bufferPointer;
+    void *bufferPointerAsVoid = (void *) bufferPointer;
     ma_uint64 frameCount64 = *frameCount * 1ULL;
     ma_uint64 framesWritten;
     framesWritten = capture.writeBufferToWavFile(bufferPointerAsVoid, frameCount64, filePath);
