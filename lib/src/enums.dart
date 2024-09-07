@@ -26,7 +26,10 @@ enum CaptureErrors {
 
   /// null pointer. Could happens when passing a non initialized
   /// pointer (with calloc()) to retrieve FFT or wave data
-  nullPointer;
+  nullPointer,
+
+  /// Frames did not write
+  captureWriteFailed;
 
   /// Returns a human-friendly sentence describing the error.
   String get _asSentence {
@@ -41,6 +44,8 @@ enum CaptureErrors {
         return 'Capture null pointer error. Could happens when passing a non '
             'initialized pointer (with calloc()) to retrieve FFT or wave data. '
             'Or, setVisualization has not been enabled.';
+      case CaptureErrors.captureWriteFailed:
+        return 'Failed to write full number of requested frames to disk.';
     }
   }
 

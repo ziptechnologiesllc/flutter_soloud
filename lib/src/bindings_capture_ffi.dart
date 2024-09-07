@@ -21,7 +21,7 @@ final class _CaptureDevice extends ffi.Struct {
 class FlutterCaptureFfi {
   /// Holds the symbol lookup function.
   final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-  _lookup;
+      _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
   FlutterCaptureFfi(ffi.DynamicLibrary dynamicLibrary)
@@ -30,14 +30,14 @@ class FlutterCaptureFfi {
   /// The symbols are looked up with [lookup].
   FlutterCaptureFfi.fromLookup(
       ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-      lookup)
+          lookup)
       : _lookup = lookup;
 
   /// --------------------- copy here the new functions to generate
   List<CaptureDevice> listCaptureDevices() {
     List<CaptureDevice> ret = [];
     ffi.Pointer<ffi.Pointer<_CaptureDevice>> devices =
-    calloc(ffi.sizeOf<_CaptureDevice>());
+        calloc(ffi.sizeOf<_CaptureDevice>());
     ffi.Pointer<ffi.Int> n_devices = calloc();
 
     _listCaptureDevices(
@@ -84,24 +84,26 @@ class FlutterCaptureFfi {
       void Function(ffi.Pointer<ffi.Pointer<_CaptureDevice>>, int)>();
 
   ///
-  CaptureErrors initCapture(int deviceID, ffi.Pointer<ffi.Float> buffer, ffi.Pointer<ffi.UnsignedInt> lengthPointer) {
+  CaptureErrors initCapture(int deviceID, ffi.Pointer<ffi.Float> buffer,
+      ffi.Pointer<ffi.UnsignedInt> lengthPointer) {
     final e = _initCapture(deviceID, buffer, lengthPointer);
     return CaptureErrors.values[e];
   }
 
-  late final _initCapturePtr =
-  _lookup<
-      ffi.NativeFunction<ffi.Int32 Function(ffi.Int, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>)>>(
-      'initCapture');
+  late final _initCapturePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(ffi.Int, ffi.Pointer<ffi.Float>,
+              ffi.Pointer<ffi.UnsignedInt>)>>('initCapture');
   late final _initCapture = _initCapturePtr.asFunction<
-      int Function(int, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>)>();
+      int Function(
+          int, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>)>();
 
   void disposeCapture() {
     return _disposeCapture();
   }
 
   late final _disposeCapturePtr =
-  _lookup<ffi.NativeFunction<ffi.Void Function()>>('disposeCapture');
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>('disposeCapture');
   late final _disposeCapture = _disposeCapturePtr.asFunction<void Function()>();
 
   bool isCaptureInited() {
@@ -109,25 +111,25 @@ class FlutterCaptureFfi {
   }
 
   late final _isCaptureInitedPtr =
-  _lookup<ffi.NativeFunction<ffi.Int Function()>>('isCaptureInited');
+      _lookup<ffi.NativeFunction<ffi.Int Function()>>('isCaptureInited');
   late final _isCaptureInited =
-  _isCaptureInitedPtr.asFunction<int Function()>();
+      _isCaptureInitedPtr.asFunction<int Function()>();
 
   bool isCaptureStarted() {
     return _isCaptureStarted() == 1 ? true : false;
   }
 
   late final _isCaptureStartedPtr =
-  _lookup<ffi.NativeFunction<ffi.Int Function()>>('isCaptureStarted');
+      _lookup<ffi.NativeFunction<ffi.Int Function()>>('isCaptureStarted');
   late final _isCaptureStarted =
-  _isCaptureStartedPtr.asFunction<int Function()>();
+      _isCaptureStartedPtr.asFunction<int Function()>();
 
   CaptureErrors startCapture() {
     return CaptureErrors.values[_startCapture()];
   }
 
   late final _startCapturePtr =
-  _lookup<ffi.NativeFunction<ffi.Int32 Function()>>('startCapture');
+      _lookup<ffi.NativeFunction<ffi.Int32 Function()>>('startCapture');
   late final _startCapture = _startCapturePtr.asFunction<int Function()>();
 
   CaptureErrors stopCapture() {
@@ -135,41 +137,43 @@ class FlutterCaptureFfi {
   }
 
   late final _stopCapturePtr =
-  _lookup<ffi.NativeFunction<ffi.Int32 Function()>>('stopCapture');
+      _lookup<ffi.NativeFunction<ffi.Int32 Function()>>('stopCapture');
   late final _stopCapture = _stopCapturePtr.asFunction<int Function()>();
 
-  CaptureErrors getFullWave(ffi.Pointer<ffi.Float> samples,) {
+  CaptureErrors getFullWave(
+    ffi.Pointer<ffi.Float> samples,
+  ) {
     int ret = _getFullWave(samples);
     return CaptureErrors.values[ret];
   }
 
   late final _getFullWavePtr =
-  _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.Float>)>>(
-      'getFullWave');
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.Float>)>>(
+          'getFullWave');
   late final _getFullWave =
-  _getFullWavePtr.asFunction<int Function(ffi.Pointer<ffi.Float>)>();
+      _getFullWavePtr.asFunction<int Function(ffi.Pointer<ffi.Float>)>();
 
   CaptureErrors getRecordedFrameCount(ffi.Pointer<ffi.UnsignedInt> frameCount) {
     int ret = _getRecordedFrameCount(frameCount);
     return CaptureErrors.values[ret];
   }
 
-  late final _getRecordedFrameCountPtr =
-  _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.UnsignedInt>)>>(
+  late final _getRecordedFrameCountPtr = _lookup<
+          ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.UnsignedInt>)>>(
       'getRecordedFrameCount');
   late final _getRecordedFrameCount = _getRecordedFrameCountPtr
       .asFunction<int Function(ffi.Pointer<ffi.UnsignedInt>)>();
 
-
   CaptureErrors getCaptureAudioTexture2D(
-      ffi.Pointer<ffi.Pointer<ffi.Float>> samples,) {
+    ffi.Pointer<ffi.Pointer<ffi.Float>> samples,
+  ) {
     int ret = _getCaptureAudioTexture2D(samples);
     return CaptureErrors.values[ret];
   }
 
   late final _getCaptureAudioTexture2DPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Int32 Function(ffi.Pointer<ffi.Pointer<ffi.Float>>)>>(
+          ffi.NativeFunction<
+              ffi.Int32 Function(ffi.Pointer<ffi.Pointer<ffi.Float>>)>>(
       'getCaptureAudioTexture2D');
   late final _getCaptureAudioTexture2D = _getCaptureAudioTexture2DPtr
       .asFunction<int Function(ffi.Pointer<ffi.Pointer<ffi.Float>>)>();
@@ -180,33 +184,40 @@ class FlutterCaptureFfi {
   }
 
   late final _setCaptureFftSmoothingPtr =
-  _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Float)>>(
-      'setCaptureFftSmoothing');
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Float)>>(
+          'setCaptureFftSmoothing');
   late final _setCaptureFftSmoothing =
-  _setCaptureFftSmoothingPtr.asFunction<int Function(double)>();
-
+      _setCaptureFftSmoothingPtr.asFunction<int Function(double)>();
 
   CaptureErrors getCaptureAudioTexture(ffi.Pointer<ffi.Float> samples) {
     int ret = _getCaptureAudioTexture(samples);
     return CaptureErrors.values[ret];
   }
 
-  late final _getCaptureAudioTexturePtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Int32 Function(ffi.Pointer<ffi.Float>)>>(
-      'getCaptureAudioTexture');
+  late final _getCaptureAudioTexturePtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.Float>)>>(
+          'getCaptureAudioTexture');
   late final _getCaptureAudioTexture = _getCaptureAudioTexturePtr
       .asFunction<int Function(ffi.Pointer<ffi.Float>)>();
 
-  CaptureErrors writeAudioBufferToWavFile(ffi.Pointer<ffi.Float> audioBuffer, ffi.Pointer<ffi.UnsignedInt> frameCount, ffi.Pointer<ffi.Int8> filePath) {
+  CaptureErrors writeAudioBufferToWavFile(ffi.Pointer<ffi.Float> audioBuffer,
+      ffi.Pointer<ffi.UnsignedInt> frameCount, ffi.Pointer<ffi.Int8> filePath) {
     int ret = _writeAudioBufferToWavFile(audioBuffer, frameCount, filePath);
-    return CaptureErrors.values[ret];
+    if (ret == frameCount.value) {
+      return CaptureErrors.captureNoError;
+    } else {
+      return CaptureErrors.captureWriteFailed;
+    }
   }
 
   late final _writeAudioBufferToWavFilePtr = _lookup<
       ffi.NativeFunction<
-          ffi.Int32 Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>, ffi.Pointer<ffi.Int8>)>>(
-      'writeAudioBufferToWavFile');
-  late final _writeAudioBufferToWavFile = _writeAudioBufferToWavFilePtr
-      .asFunction<int Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>, ffi.Pointer<ffi.Int8>)>();
+          ffi.Int32 Function(
+              ffi.Pointer<ffi.Float>,
+              ffi.Pointer<ffi.UnsignedInt>,
+              ffi.Pointer<ffi.Int8>)>>('writeAudioBufferToWavFile');
+  late final _writeAudioBufferToWavFile =
+      _writeAudioBufferToWavFilePtr.asFunction<
+          int Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>,
+              ffi.Pointer<ffi.Int8>)>();
 }

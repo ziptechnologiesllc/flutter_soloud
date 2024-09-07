@@ -173,13 +173,13 @@ ma_uint64 Capture::writeBufferToWavFile(void *bufferPointer, ma_uint64 frameCoun
     ma_encoder encoder;
     ma_result result = ma_encoder_init_file(filePath, &config, &encoder);
     if (result != MA_SUCCESS) {
-        // Error
+        printf("Error init wav file: %i", result);
     }
 
     ma_uint64 framesWritten;
     result = ma_encoder_write_pcm_frames(&encoder, bufferPointer, frameCount, &framesWritten);
     if (result != MA_SUCCESS) {
-
+        printf("Error writing wav file: %i", result);
     }
     return framesWritten;
 
