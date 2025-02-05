@@ -326,16 +326,10 @@ extern "C"
             return;
         }
 
-        std::filesystem::path pa = std::filesystem::u8path(completeFileName);
+        // Add hash variable declaration
         unsigned int hash = 0;
-        // std::thread loadThread([p, pa, completeFileName, loadIntoMem, hash]()
-        //                        {
-        PlayerErrors error = p->loadFile(pa.string(), loadIntoMem, (unsigned int*)&hash);
-        // printf("*** LOAD FILE FROM THREAD error: %d  hash: %u\n", error,  *hash);
-        fileLoadedCallback(error, completeFileName, (unsigned int*)&hash);
-            // });
-        // // TODO(marco): use .detach()? Use std::atomic somewhere
-        // loadThread.join();
+        PlayerErrors error = p->loadFile(completeFileName, loadIntoMem, &hash);
+        fileLoadedCallback(error, completeFileName, &hash);
     }
 
     /// Load a new sound stored into [buffer] to be played once or multiple times later.

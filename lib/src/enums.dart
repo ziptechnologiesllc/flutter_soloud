@@ -15,42 +15,15 @@ final class CaptureDevice {
 
 /// Possible capture errors
 enum CaptureErrors {
-  /// No error
-  captureNoError,
-
-  /// Capture failed to initialize
-  captureInitFailed,
-
-  /// Capture not yet initialized
+  captureNoError, // capture_noError
+  captureInitFailed, // capture_init_failed
+  captureDeviceInUse,
+  captureInvalidHandle,
+  captureNoMicrophone,
+  captureUnknownError,
   captureNotInited,
-
-  /// null pointer. Could happens when passing a non initialized
-  /// pointer (with calloc()) to retrieve FFT or wave data
   nullPointer,
-
-  /// Frames did not write
-  captureWriteFailed;
-
-  /// Returns a human-friendly sentence describing the error.
-  String get _asSentence {
-    switch (this) {
-      case CaptureErrors.captureNoError:
-        return 'No error';
-      case CaptureErrors.captureInitFailed:
-        return 'Capture failed to initialize';
-      case CaptureErrors.captureNotInited:
-        return 'Capture not yet initialized';
-      case CaptureErrors.nullPointer:
-        return 'Capture null pointer error. Could happens when passing a non '
-            'initialized pointer (with calloc()) to retrieve FFT or wave data. '
-            'Or, setVisualization has not been enabled.';
-      case CaptureErrors.captureWriteFailed:
-        return 'Failed to write full number of requested frames to disk.';
-    }
-  }
-
-  @override
-  String toString() => 'CaptureErrors.$name ($_asSentence)';
+  captureWriteFailed,
 }
 
 /// Possible player errors.

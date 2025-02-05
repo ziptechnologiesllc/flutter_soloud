@@ -84,17 +84,17 @@ interface class SoLoudCapture {
   /// Return [CaptureErrors.captureNoError] if no error.
   ///
   CaptureErrors getCaptureAudioTexture2D(
-      ffi.Pointer<ffi.Pointer<ffi.Float>> audioData,) {
+    ffi.Pointer<ffi.Pointer<ffi.Float>> audioData,
+  ) {
     if (!isCaptureInited || audioData == ffi.nullptr) {
       _log.severe(
-            () => 'getCaptureAudioTexture2D(): ${CaptureErrors
-            .captureNotInited}',
+        () => 'getCaptureAudioTexture2D(): ${CaptureErrors.captureNotInited}',
       );
       return CaptureErrors.captureNotInited;
     }
 
     final ret =
-    SoLoudController().captureFFI.getCaptureAudioTexture2D(audioData);
+        SoLoudController().captureFFI.getCaptureAudioTexture2D(audioData);
     _logCaptureError(ret, from: 'getCaptureAudioTexture2D() result');
 
     if (ret != CaptureErrors.captureNoError) {
@@ -114,15 +114,26 @@ interface class SoLoudCapture {
   ///
   /// Return [CaptureErrors.captureNoError] if no error.
   ///
-  CaptureErrors initialize(
-      {int deviceID = -1, required ffi.Pointer<ffi.Float> buffer, required ffi.Pointer<ffi.UnsignedInt> lengthPointer}) {
-    final ret = SoLoudController().captureFFI.initCapture(deviceID, buffer, lengthPointer);
-    _logCaptureError(ret, from: 'initCapture() result');
-    if (ret == CaptureErrors.captureNoError) {
+  CaptureErrors initialize({
+    int deviceID = -1, // Default to -1 as per C++ code
+    required ffi.Pointer<ffi.Float> buffer,
+    required ffi.Pointer<ffi.UnsignedInt> lengthPointer,
+  }) {
+    if (!_checkMicrophoneAvailable()) {
+      return CaptureErrors.captureNoMicrophone;
+    }
+
+    final result = SoLoudController().captureFFI.initCapture(
+          deviceID,
+          buffer,
+          lengthPointer,
+        );
+
+    if (result == CaptureErrors.captureNoError) {
       isCaptureInited = true;
     }
 
-    return ret;
+    return result;
   }
 
   /// Get the status of the device.
@@ -158,6 +169,7 @@ interface class SoLoudCapture {
   /// Return [CaptureErrors.captureNoError] if no error.
   ///
   CaptureErrors setCaptureFftSmoothing(double smooth) {
+    SoLoudController().ensureInitialized();
     final ret = SoLoudController().captureFFI.setCaptureFftSmoothing(smooth);
     _logCaptureError(ret, from: 'setCaptureFftSmoothing() result');
     return ret;
@@ -236,30 +248,38 @@ interface class SoLoudCapture {
 
   CaptureErrors getCaptureAudioTexture(ffi.Pointer<ffi.Float> audioData) {
     if (!isCaptureInited || audioData == ffi.nullptr) {
-      _logCaptureError(CaptureErrors.captureNotInited,from: 'getCaptureTexture() result');
+      _logCaptureError(CaptureErrors.captureNotInited,
+          from: 'getCaptureTexture() result');
       return CaptureErrors.captureNotInited;
     }
 
-    final ret =
-    SoLoudController().captureFFI.getCaptureAudioTexture(audioData);
+    final ret = SoLoudController().captureFFI.getCaptureAudioTexture(audioData);
     if (ret != CaptureErrors.captureNoError || audioData.value == ffi.nullptr) {
-      _logCaptureError(
-          CaptureErrors.nullPointer, from: 'getCaptureTexture() result');
+      _logCaptureError(CaptureErrors.nullPointer,
+          from: 'getCaptureTexture() result');
       return CaptureErrors.nullPointer;
     }
     return CaptureErrors.captureNoError;
   }
 
-  CaptureErrors writeAudioBufferToWavFile(ffi.Pointer<ffi.Float> audioBuffer, ffi.Pointer<ffi.UnsignedInt> frameCount, ffi.Pointer<ffi.Int8> filePath) {
-
-    final ret =
-    SoLoudController().captureFFI.writeAudioBufferToWavFile(audioBuffer, frameCount, filePath);
-    if (ret != CaptureErrors.captureNoError || audioBuffer.value == ffi.nullptr) {
-      _logCaptureError(
-          CaptureErrors.nullPointer, from: 'writeAudioBufferToWavFile() result');
+  CaptureErrors writeAudioBufferToWavFile(ffi.Pointer<ffi.Float> audioBuffer,
+      ffi.Pointer<ffi.UnsignedInt> frameCount, ffi.Pointer<ffi.Int8> filePath) {
+    final ret = SoLoudController()
+        .captureFFI
+        .writeAudioBufferToWavFile(audioBuffer, frameCount, filePath);
+    if (ret != CaptureErrors.captureNoError ||
+        audioBuffer.value == ffi.nullptr) {
+      _logCaptureError(CaptureErrors.nullPointer,
+          from: 'writeAudioBufferToWavFile() result');
       return CaptureErrors.nullPointer;
     }
     return CaptureErrors.captureNoError;
   }
 
+  // Add helper method to check microphone availability
+  bool _checkMicrophoneAvailable() {
+    // Implementation will depend on platform-specific code
+    // For now, return true and let the native code handle actual availability
+    return true;
+  }
 }

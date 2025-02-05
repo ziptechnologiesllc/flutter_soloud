@@ -78,7 +78,7 @@ CaptureErrors Capture::init(int deviceID, float* bufferFromDart, unsigned int* l
         deviceConfig.capture.pDeviceID = &pPlaybackInfos[deviceID].id;
     deviceConfig.capture.format = ma_format_f32;
     deviceConfig.capture.channels = 1;
-    deviceConfig.sampleRate = 44100;
+    deviceConfig.sampleRate = 48000;
     deviceConfig.dataCallback = data_callback;
     deviceConfig.pUserData = nullptr;
 

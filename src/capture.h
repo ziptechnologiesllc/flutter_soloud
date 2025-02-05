@@ -8,12 +8,26 @@
 
 #include <vector>
 #include <string>
+#include <mutex>
 
 #include "soloud/src/backend/miniaudio/miniaudio.h"
+
+#ifdef _WIN32
+  #define FFI_PLUGIN_EXPORT __declspec(dllexport)
+#else
+  #define FFI_PLUGIN_EXPORT __attribute__((visibility("default"))) __attribute__((used))
+#endif
 
 struct CaptureDevice {
     char* name;
     unsigned int isDefault;
+};
+
+enum CaptureErrors {
+    capture_noError = 0,
+    capture_init_failed = 1,
+    capture_not_inited = 2,
+    failed_to_start_device = 3
 };
 
 class Capture {

@@ -10,6 +10,7 @@ export 'src/filter_params.dart';
 export 'src/filters/filters.dart' show FilterType;
 export 'src/helpers/playback_device.dart';
 export 'src/soloud.dart';
+export 'src/soloud_capture.dart';
 export 'src/sound_handle.dart';
 export 'src/sound_hash.dart';
 export 'src/tools/soloud_tools.dart';

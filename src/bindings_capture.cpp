@@ -9,16 +9,19 @@
 #include <iostream>
 #include <memory.h>
 #include <memory>
+#include <mutex>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+std::mutex capture_mutex;
 Capture capture;
 std::unique_ptr<Analyzer> analyzerCapture = std::make_unique<Analyzer>(256);
 
 FFI_PLUGIN_EXPORT void listCaptureDevices(struct CaptureDevice **devices, int *n_devices)
 {
+    std::lock_guard<std::mutex> guard(capture_mutex);
     std::vector<CaptureDevice> d = capture.listCaptureDevices();
     int numDevices = 0;
     for (int i=0; i<(int)d.size(); i++)
@@ -47,6 +50,7 @@ FFI_PLUGIN_EXPORT void freeListCaptureDevices(struct CaptureDevice **devices, in
 
 FFI_PLUGIN_EXPORT enum CaptureErrors initCapture(int deviceID, float *buffer, unsigned int *lengthPointer)
 {
+    std::lock_guard<std::mutex> guard(capture_mutex);
     CaptureErrors res = capture.init(deviceID, buffer, lengthPointer);
     return res;
 }

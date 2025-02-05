@@ -83,31 +83,20 @@ class FlutterCaptureFfi {
   late final _freeListCaptureDevices = _freeListCaptureDevicesPtr.asFunction<
       void Function(ffi.Pointer<ffi.Pointer<_CaptureDevice>>, int)>();
 
-  /// Initialize capture device
-  CaptureErrors initCapture(
-    int deviceID,
-    ffi.Pointer<ffi.Float> buffer,
-    ffi.Pointer<ffi.UnsignedInt> lengthPointer,
-  ) {
-    print('Initializing capture with deviceID: $deviceID');
+  ///
+  CaptureErrors initCapture(int deviceID, ffi.Pointer<ffi.Float> buffer,
+      ffi.Pointer<ffi.UnsignedInt> lengthPointer) {
     final e = _initCapture(deviceID, buffer, lengthPointer);
-    print('Capture initialization result: ${CaptureErrors.values[e]}');
     return CaptureErrors.values[e];
   }
 
   late final _initCapturePtr = _lookup<
       ffi.NativeFunction<
-          ffi.Int32 Function(
-              ffi.Int32, // deviceID
-              ffi.Pointer<ffi.Float>, // buffer
-              ffi.Pointer<ffi.UnsignedInt> // lengthPointer
-              )>>('initCapture');
+          ffi.Int32 Function(ffi.Int, ffi.Pointer<ffi.Float>,
+              ffi.Pointer<ffi.UnsignedInt>)>>('initCapture');
   late final _initCapture = _initCapturePtr.asFunction<
       int Function(
-          int, // deviceID
-          ffi.Pointer<ffi.Float>, // buffer
-          ffi.Pointer<ffi.UnsignedInt> // lengthPointer
-          )>();
+          int, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.UnsignedInt>)>();
 
   void disposeCapture() {
     return _disposeCapture();

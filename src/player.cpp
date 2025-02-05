@@ -207,7 +207,7 @@ PlayerErrors Player::loadMemory(float *buffer, unsigned int &hash, unsigned int 
     if (!mInited)
         return backendNotInited;
     char bufferString [33];
-    snprintf(bufferString, 33, "%d", buffer);
+    snprintf(bufferString, 33, "%p", (void*)buffer);
 
     unsigned int newHash = (unsigned int)std::hash<std::string>{}(bufferString);
     /// check if the sound has been already loaded
@@ -714,9 +714,9 @@ ActiveSound *Player::findByHandle(SoLoud::handle handle)
     while (i < (int)sounds.size())
     {
         int index = 0;
-        while (index < (int)sounds[i].get()->handle.size())
+        while (index < (int)sounds[i]->handle.size())
         {
-            if (sounds[i].get()->handle[index] == handle)
+            if (sounds[i]->handle[index] == handle)
             {
                 return sounds[i].get();
             }
