@@ -35,7 +35,7 @@ class SoLoudController {
         nativeLib = Platform.isLinux
             ? ffi.DynamicLibrary.open('libflutter_soloud.so')
             : (Platform.isAndroid
-                ? ffi.DynamicLibrary.open('libflutter_soloud.so')
+                ? ffi.DynamicLibrary.open('libflutter_soloud_plugin.so')
                 : (Platform.isWindows
                     ? ffi.DynamicLibrary.open('flutter_soloud.dll')
                     : ffi.DynamicLibrary.process()));
@@ -48,8 +48,8 @@ class SoLoudController {
         print('Successfully created FlutterCaptureFfi instance');
 
         // Test a simple FFI call
-        final devices = captureFFI.listCaptureDevices();
-        print('Found ${devices.length} capture devices');
+        //final devices = captureFFI.listCaptureDevices();
+        //print('Found ${devices.length} capture devices');
 
         _isInitialized = true;
         print('SoLoud capture FFI initialized successfully');
