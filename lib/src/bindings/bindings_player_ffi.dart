@@ -2045,4 +2045,52 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
   late final _readSamplesFromMem = _readSamplesFromMemPtr.asFunction<
       int Function(ffi.Pointer<ffi.Uint8>, int, double, double, int, bool,
           ffi.Pointer<ffi.Float>)>();
+
+  // Extract samples from an already-loaded audio source
+  late final _extractSamplesFromLoadedSourcePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int Function(
+              ffi.UnsignedInt,
+              ffi.Float,
+              ffi.Float,
+              ffi.UnsignedLong,
+              ffi.Bool,
+              ffi.Pointer<ffi.Float>)>>('extractSamplesFromLoadedSource');
+  late final _extractSamplesFromLoadedSource = _extractSamplesFromLoadedSourcePtr.asFunction<
+      int Function(int, double, double, int, bool,
+          ffi.Pointer<ffi.Float>)>();
+
+  /// Extract samples from an already-loaded audio source
+  Float32List? extractSamplesFromLoadedSource(
+    int soundHash,
+    int numSamplesNeeded, {
+    double startTime = 0,
+    double endTime = -1,
+    bool average = false,
+  }) {
+    final pSamples =
+        calloc<ffi.Float>(numSamplesNeeded * ffi.sizeOf<ffi.Float>());
+    final error = _extractSamplesFromLoadedSource(
+      soundHash,
+      startTime,
+      endTime,
+      numSamplesNeeded,
+      average,
+      pSamples,
+    );
+
+    if (error != 0) {
+      calloc.free(pSamples);
+      // Error codes:
+      // 1 = sound not loaded
+      // 2 = sound is streamed, not in memory
+      // 3 = no sample data
+      // 4 = invalid time range
+      return null;
+    }
+
+    final samples = pSamples.asTypedList(numSamplesNeeded).asUnmodifiableView();
+    // Don't free pSamples - it gets GC'd with the TypedList
+    return samples;
+  }
 }

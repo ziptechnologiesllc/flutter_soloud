@@ -1895,6 +1895,15 @@ extern "C"
         return Waveform::readSamples(nullptr, buffer, dataSize, startTime, endTime, numSamplesNeeded, average, pSamples);
     }
 
+    // Extract samples from an already-loaded audio source
+    FFI_PLUGIN_EXPORT int extractSamplesFromLoadedSource(
+        unsigned int hash,
+        float startTime,
+        float endTime,
+        unsigned long numSamplesNeeded,
+        bool average,
+        float *pSamples);
+
 #ifdef __cplusplus
 }
 #endif

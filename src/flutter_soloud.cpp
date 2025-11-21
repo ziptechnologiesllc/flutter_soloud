@@ -103,6 +103,7 @@
 #include "synth/basic_wave.cpp"
 #include "waveform/waveform.cpp"
 #include "waveform/miniaudio_libvorbis.cpp"
+#include "waveform_extractor.cpp"
 #include "audiobuffer/audiobuffer.cpp"
 #include "audiobuffer/stream_decoder.cpp"
 #include "audiobuffer/flac_stream_decoder.cpp"
