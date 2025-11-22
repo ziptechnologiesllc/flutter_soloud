@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <cmath>
 
+// External reference to the global player instance from bindings.cpp
+extern std::unique_ptr<Player> player;
+
 extern "C" {
 
 /// Extract waveform samples from an already-loaded audio source.
@@ -26,11 +29,13 @@ int extractSamplesFromLoadedSource(
     bool average,
     float* pSamples)
 {
-    // Get the Player instance
-    Player& player = Player::instance();
+    // Check if player is initialized
+    if (!player || !player->isInited()) {
+        return 5; // Error: player not initialized
+    }
 
     // Find the sound by hash
-    std::shared_ptr<ActiveSound> sound = player.findByHash(hash);
+    ActiveSound* sound = player->findByHash(hash);
 
     if (sound == nullptr) {
         // Sound not found
@@ -78,54 +83,41 @@ int extractSamplesFromLoadedSource(
     unsigned int rangeSamples = endSample - startSample;
     unsigned int samplesPerChannel = rangeSamples / channels;
 
-    // Resample/downsample to the requested number of samples
-    if (samplesPerChannel <= numSamplesNeeded) {
-        // We have fewer samples than requested, just copy them
-        // Mix down to mono if multi-channel
-        for (unsigned int i = 0; i < samplesPerChannel && i < numSamplesNeeded; i++) {
+    // Calculate step size for downsampling
+    float stepSize = static_cast<float>(samplesPerChannel) / numSamplesNeeded;
+
+    for (unsigned int i = 0; i < numSamplesNeeded; i++) {
+        if (average) {
+            // Use RMS (Root Mean Square) for proper waveform visualization
+            // This gives the "energy" of the signal, not just raw average
+            float startPos = i * stepSize;
+            float endPos = (i + 1) * stepSize;
+            unsigned int startIdx = static_cast<unsigned int>(startPos);
+            unsigned int endIdx = static_cast<unsigned int>(std::ceil(endPos));
+            endIdx = std::min(endIdx, samplesPerChannel);
+
+            double sumSquares = 0.0;
+            unsigned int count = 0;
+
+            for (unsigned int j = startIdx; j < endIdx; j++) {
+                for (unsigned int ch = 0; ch < channels; ch++) {
+                    float sample = wav->mData[startSample + (j * channels) + ch];
+                    sumSquares += sample * sample;
+                    count++;
+                }
+            }
+
+            // RMS = sqrt(sum of squares / count)
+            pSamples[i] = count > 0 ? std::sqrt(sumSquares / count) : 0.0f;
+        } else {
+            // Simple sampling (pick one sample) - take absolute value for visualization
+            unsigned int idx = static_cast<unsigned int>(i * stepSize);
+            idx = std::min(idx, samplesPerChannel - 1);
             float sum = 0.0f;
             for (unsigned int ch = 0; ch < channels; ch++) {
-                sum += wav->mData[startSample + (i * channels) + ch];
+                sum += std::fabs(wav->mData[startSample + (idx * channels) + ch]);
             }
             pSamples[i] = sum / channels;
-        }
-        // Fill remaining with zeros
-        for (unsigned int i = samplesPerChannel; i < numSamplesNeeded; i++) {
-            pSamples[i] = 0.0f;
-        }
-    } else {
-        // Downsample to the requested number
-        float stepSize = static_cast<float>(samplesPerChannel) / numSamplesNeeded;
-
-        for (unsigned int i = 0; i < numSamplesNeeded; i++) {
-            if (average) {
-                // Average over a window
-                float startPos = i * stepSize;
-                float endPos = (i + 1) * stepSize;
-                unsigned int startIdx = static_cast<unsigned int>(startPos);
-                unsigned int endIdx = static_cast<unsigned int>(std::ceil(endPos));
-                endIdx = std::min(endIdx, samplesPerChannel);
-
-                float sum = 0.0f;
-                unsigned int count = 0;
-
-                for (unsigned int j = startIdx; j < endIdx; j++) {
-                    for (unsigned int ch = 0; ch < channels; ch++) {
-                        sum += wav->mData[startSample + (j * channels) + ch];
-                        count++;
-                    }
-                }
-
-                pSamples[i] = count > 0 ? sum / count : 0.0f;
-            } else {
-                // Simple sampling (pick one sample)
-                unsigned int idx = static_cast<unsigned int>(i * stepSize);
-                float sum = 0.0f;
-                for (unsigned int ch = 0; ch < channels; ch++) {
-                    sum += wav->mData[startSample + (idx * channels) + ch];
-                }
-                pSamples[i] = sum / channels;
-            }
         }
     }
 
