@@ -58,15 +58,15 @@ Flutter audio plugin using SoLoud library and FFI
    }
 
   # Only include libraries if opus/ogg is enabled
-  # if !disable_opus_ogg
-  #   s.osx.vendored_libraries = [
-  #     'libs/libogg.a',
-  #     'libs/libopus.a',
-  #     'libs/libvorbis.a',
-  #     'libs/libvorbisfile.a',
-  #     'libs/libFLAC.a'
-  #   ]
-  # end
+  if !disable_opus_ogg
+    s.osx.vendored_libraries = [
+      'libs/libogg.a',
+      'libs/libopus.a',
+      'libs/libvorbis.a',
+      'libs/libvorbisfile.a',
+      'libs/libFLAC.a'
+    ]
+  end
 
   s.swift_version = '5.0'
   s.osx.framework  = ['AudioToolbox', 'AVFAudio']
