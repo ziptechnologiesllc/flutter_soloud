@@ -79,11 +79,6 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
   // Callbacks impl
   // ////////////////////////////////////////////////
 
-  ffi.NativeCallable<DartVoiceEndedCallbackTFunction>? nativeVoiceEndedCallable;
-  ffi.NativeCallable<DartFileLoadedCallbackTFunction>? nativeFileLoadedCallable;
-  ffi.NativeCallable<DartStateChangedCallbackTFunction>?
-      nativeStateChangedCallable;
-
   void _voiceEndedCallback(ffi.Pointer<ffi.UnsignedInt> handle) {
     _log.finest(() => 'VOICE ENDED EVENT handle: ${handle.value}');
     voiceEndedEventController.add(handle.value);
@@ -97,18 +92,18 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
     ffi.Pointer<ffi.Int32> error,
     ffi.Pointer<ffi.Char> completeFileName,
     ffi.Pointer<ffi.UnsignedInt> hash,
-    ffi.Pointer<ffi.Uint64> counter,
+    ffi.Pointer<ffi.Uint64> timeStamp,
   ) {
     _log.finest(() =>
         'FILE LOADED EVENT error: ${PlayerErrors.values[error.value].name}  '
         'hash: ${hash.value}  '
         'file: ${completeFileName.cast<Utf8>().toDartString()}  '
-        'counter: ${counter.value}');
+        'timeStamp: ${timeStamp.value}');
     final result = <String, dynamic>{
       'error': error.value,
       'completeFileName': completeFileName.cast<Utf8>().toDartString(),
       'hash': hash.value,
-      'counter': counter.value,
+      'timeStamp': timeStamp.value,
     };
     fileLoadedEventsController.add(result);
     // Must free a pointer made on cpp. On Windows this must be freed
@@ -116,7 +111,7 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
     nativeFree(error.cast<ffi.Void>());
     nativeFree(completeFileName.cast<ffi.Void>());
     nativeFree(hash.cast<ffi.Void>());
-    nativeFree(counter.cast<ffi.Void>());
+    nativeFree(timeStamp.cast<ffi.Void>());
   }
 
   void _stateChangedCallback(ffi.Pointer<ffi.Int32> state) {
@@ -128,34 +123,35 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
     stateChangedController.add(s);
   }
 
-  @override
-  void disposeNativeCallables() {
-    nativeVoiceEndedCallable?.close();
-    nativeFileLoadedCallable?.close();
-    nativeStateChangedCallable?.close();
-    _setDartEventCallback(ffi.nullptr, ffi.nullptr, ffi.nullptr);
-  }
+  /// Native callables kept as fields to prevent GC
+  ffi.NativeCallable<DartVoiceEndedCallbackTFunction>? _voiceEndedCallable;
+  ffi.NativeCallable<DartFileLoadedCallbackTFunction>? _fileLoadedCallable;
+  ffi.NativeCallable<DartStateChangedCallbackTFunction>? _stateChangedCallable;
+
+  /// Stream-specific callables tracked by sound hash
+  final Map<int, ffi.NativeCallable> _streamBufferingCallables = {};
+  final Map<int, ffi.NativeCallable> _streamMetadataCallables = {};
 
   @override
   Future<void> setDartEventCallbacks() async {
     // Create a NativeCallable for the Dart functions
-    nativeVoiceEndedCallable =
+    _voiceEndedCallable =
         ffi.NativeCallable<DartVoiceEndedCallbackTFunction>.listener(
       _voiceEndedCallback,
     );
-    nativeFileLoadedCallable =
+    _fileLoadedCallable =
         ffi.NativeCallable<DartFileLoadedCallbackTFunction>.listener(
       _fileLoadedCallback,
     );
-    nativeStateChangedCallable =
+    _stateChangedCallable =
         ffi.NativeCallable<DartStateChangedCallbackTFunction>.listener(
       _stateChangedCallback,
     );
 
     _setDartEventCallback(
-      nativeVoiceEndedCallable!.nativeFunction,
-      nativeFileLoadedCallable!.nativeFunction,
-      nativeStateChangedCallable!.nativeFunction,
+      _voiceEndedCallable!.nativeFunction,
+      _fileLoadedCallable!.nativeFunction,
+      _stateChangedCallable!.nativeFunction,
     );
   }
 
@@ -325,6 +321,23 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
 
   @override
   void deinit() {
+    _voiceEndedCallable?.close();
+    _voiceEndedCallable = null;
+    _fileLoadedCallable?.close();
+    _fileLoadedCallable = null;
+    _stateChangedCallable?.close();
+    _stateChangedCallable = null;
+
+    for (final c in _streamBufferingCallables.values) {
+      c.close();
+    }
+    _streamBufferingCallables.clear();
+
+    for (final c in _streamMetadataCallables.values) {
+      c.close();
+    }
+    _streamMetadataCallables.clear();
+
     return _dispose();
   }
 
@@ -349,7 +362,7 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
   void loadFile(
     String completeFileName,
     LoadMode mode,
-    int counter,
+    int timeStamp,
   ) {
     final ffi.Pointer<ffi.UnsignedInt> h =
         calloc(ffi.sizeOf<ffi.UnsignedInt>());
@@ -357,7 +370,7 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
     _loadFile(
       cString,
       mode == LoadMode.memory ? 1 : 0,
-      counter,
+      timeStamp,
     );
     calloc
       ..free(cString)
@@ -455,6 +468,18 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
       nativeOnBufferingCallable?.nativeFunction ?? ffi.nullptr,
       nativeOnMetadataCallable?.nativeFunction ?? ffi.nullptr,
     );
+
+    if (e == 0) {
+      if (nativeOnBufferingCallable != null) {
+        _streamBufferingCallables[hash.value] = nativeOnBufferingCallable;
+      }
+      if (nativeOnMetadataCallable != null) {
+        _streamMetadataCallables[hash.value] = nativeOnMetadataCallable;
+      }
+    } else {
+      nativeOnBufferingCallable?.close();
+      nativeOnMetadataCallable?.close();
+    }
     final soundHash = SoundHash(hash.value);
     final ret = (error: PlayerErrors.values[e], soundHash: soundHash);
     calloc.free(hash);
@@ -2056,9 +2081,10 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
               ffi.UnsignedLong,
               ffi.Bool,
               ffi.Pointer<ffi.Float>)>>('extractSamplesFromLoadedSource');
-  late final _extractSamplesFromLoadedSource = _extractSamplesFromLoadedSourcePtr.asFunction<
-      int Function(int, double, double, int, bool,
-          ffi.Pointer<ffi.Float>)>();
+  late final _extractSamplesFromLoadedSource =
+      _extractSamplesFromLoadedSourcePtr.asFunction<
+          int Function(
+              int, double, double, int, bool, ffi.Pointer<ffi.Float>)>();
 
   /// Extract samples from an already-loaded audio source
   Float32List? extractSamplesFromLoadedSource(
@@ -2089,8 +2115,9 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
       return null;
     }
 
-    final samples = pSamples.asTypedList(numSamplesNeeded).asUnmodifiableView();
-    // Don't free pSamples - it gets GC'd with the TypedList
+    final samples =
+        Float32List.fromList(pSamples.asTypedList(numSamplesNeeded));
+    calloc.free(pSamples);
     return samples;
   }
 }
