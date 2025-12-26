@@ -103,7 +103,7 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
       'error': error.value,
       'completeFileName': completeFileName.cast<Utf8>().toDartString(),
       'hash': hash.value,
-      'timeStamp': timeStamp.value,
+      'counter': timeStamp.value,
     };
     fileLoadedEventsController.add(result);
     // Must free a pointer made on cpp. On Windows this must be freed
@@ -320,7 +320,7 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
           int)>();
 
   @override
-  void deinit() {
+  void disposeNativeCallables() {
     _voiceEndedCallable?.close();
     _voiceEndedCallable = null;
     _fileLoadedCallable?.close();
@@ -337,8 +337,12 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
       c.close();
     }
     _streamMetadataCallables.clear();
+  }
 
-    return _dispose();
+  @override
+  void deinit() {
+    disposeNativeCallables();
+    _dispose();
   }
 
   late final _disposePtr =

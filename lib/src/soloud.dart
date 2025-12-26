@@ -167,7 +167,18 @@ interface class SoLoud {
   ///   // ...
   /// }
   /// ```
-  static final SoLoud instance = SoLoud._();
+  static SoLoud? _mockImplementation;
+
+  /// Set a mock implementation for testing.
+  @visibleForTesting
+  static void setMockImplementation(SoLoud mock) {
+    _mockImplementation = mock;
+  }
+
+  static final SoLoud _internalInstance = SoLoud._();
+
+  /// The singleton instance of [SoLoud].
+  static SoLoud get instance => _mockImplementation ?? _internalInstance;
 
   /// A helper for loading files that aren't on disk.
   final SoLoudLoader _loader = SoLoudLoader();

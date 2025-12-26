@@ -19,7 +19,6 @@ import 'package:meta/meta.dart';
 /// for users to create a sound hash from Dart.
 extension type const SoundHash._(int hash) {
   /// Constructs a valid sound hash with [hash].
-  @internal
   const SoundHash(this.hash)
       : assert(
           hash > 0,

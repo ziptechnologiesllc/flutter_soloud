@@ -46,7 +46,7 @@ int extractSamplesFromLoadedSource(unsigned int hash, float startTime,
 
   unsigned int channels = wav->mChannels;
   float sampleRate = wav->mBaseSamplerate;
-  unsigned int totalSamples = wav->mSampleCount;
+  unsigned int totalSamples = wav->mSampleCount * channels;
 
   // Calculate sample range
   unsigned int startSample = 0;
