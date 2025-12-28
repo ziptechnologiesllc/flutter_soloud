@@ -2075,6 +2075,31 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
       int Function(ffi.Pointer<ffi.Uint8>, int, double, double, int, bool,
           ffi.Pointer<ffi.Float>)>();
 
+  // ///////////////////////////////////////
+  // AEC (Adaptive Echo Cancellation)
+  // ///////////////////////////////////////
+
+  @override
+  void setAECOutputCallback(int callbackPtr) {
+    _setAECOutputCallback(ffi.Pointer.fromAddress(callbackPtr));
+  }
+
+  late final _setAECOutputCallbackPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+          'setAECOutputCallback');
+  late final _setAECOutputCallback =
+      _setAECOutputCallbackPtr.asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  @override
+  void clearAECOutputCallback() {
+    _clearAECOutputCallback();
+  }
+
+  late final _clearAECOutputCallbackPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>('clearAECOutputCallback');
+  late final _clearAECOutputCallback =
+      _clearAECOutputCallbackPtr.asFunction<void Function()>();
+
   // Extract samples from an already-loaded audio source
   late final _extractSamplesFromLoadedSourcePtr = _lookup<
       ffi.NativeFunction<

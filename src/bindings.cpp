@@ -4,6 +4,7 @@
 #include "analyzer.h"
 #include "synth/basic_wave.h"
 #include "waveform/waveform.h"
+#include "aec_bridge.h"
 
 #ifndef COMMON_H
 #include "common.h"
@@ -1903,6 +1904,22 @@ extern "C"
         unsigned long numSamplesNeeded,
         bool average,
         float *pSamples);
+
+    /////////////////////////
+    /// AEC (Adaptive Echo Cancellation)
+    /////////////////////////
+
+    // Set the AEC output callback (called from Dart with callback from flutter_recorder)
+    FFI_PLUGIN_EXPORT void setAECOutputCallback(void* callbackPtr)
+    {
+        aec_setOutputCallback(reinterpret_cast<AECOutputCallback>(callbackPtr));
+    }
+
+    // Clear the AEC output callback
+    FFI_PLUGIN_EXPORT void clearAECOutputCallback()
+    {
+        aec_clearOutputCallback();
+    }
 
 #ifdef __cplusplus
 }

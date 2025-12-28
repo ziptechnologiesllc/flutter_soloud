@@ -975,6 +975,20 @@ abstract class FlutterSoLoud {
     double endTime = -1,
     bool average = false,
   });
+
+  // ///////////////////////////////////////
+  // AEC (Adaptive Echo Cancellation)
+  // ///////////////////////////////////////
+
+  /// Set the AEC output callback to receive playback audio for echo cancellation.
+  /// [callbackPtr] is the function pointer from flutter_recorder's
+  /// aecGetOutputCallback().
+  @mustBeOverridden
+  void setAECOutputCallback(int callbackPtr);
+
+  /// Clear the AEC output callback.
+  @mustBeOverridden
+  void clearAECOutputCallback();
 }
 
 /// Used for easier conversion from [double] to [Duration].

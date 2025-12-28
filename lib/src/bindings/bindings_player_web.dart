@@ -1150,4 +1150,20 @@ class FlutterSoLoudWeb extends FlutterSoLoud {
     }
     return samples;
   }
+
+  // ///////////////////////////////////////
+  // AEC (Adaptive Echo Cancellation)
+  // ///////////////////////////////////////
+
+  @override
+  void setAECOutputCallback(int callbackPtr) {
+    // AEC is not supported on web platform
+    throw UnsupportedError('AEC is not supported on web platform');
+  }
+
+  @override
+  void clearAECOutputCallback() {
+    // AEC is not supported on web platform
+    throw UnsupportedError('AEC is not supported on web platform');
+  }
 }

@@ -2884,4 +2884,25 @@ interface class SoLoud {
     strBuf.write(playerError.toString());
     _log.log(logLevel, strBuf.toString());
   }
+
+  // ///////////////////////////////////////
+  // AEC (Adaptive Echo Cancellation)
+  // ///////////////////////////////////////
+
+  /// Set the AEC output callback to receive playback audio for echo cancellation.
+  /// [callbackPtr] is the function pointer from flutter_recorder's
+  /// aecGetOutputCallback().
+  ///
+  /// This connects SoLoud's audio output to the AEC reference buffer in
+  /// flutter_recorder, enabling echo cancellation of played loops from
+  /// the microphone input.
+  void setAECOutputCallback(int callbackPtr) {
+    _controller.soLoudFFI.setAECOutputCallback(callbackPtr);
+  }
+
+  /// Clear the AEC output callback.
+  /// Call this when shutting down or when AEC is no longer needed.
+  void clearAECOutputCallback() {
+    _controller.soLoudFFI.clearAECOutputCallback();
+  }
 }

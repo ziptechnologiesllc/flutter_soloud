@@ -24,6 +24,7 @@ distribution.
 #include <stdlib.h>
 
 #include "soloud.h"
+#include "../../../../aec_bridge.h"
 
 #if !defined(WITH_MINIAUDIO)
 
@@ -119,6 +120,11 @@ namespace SoLoud
     {
         SoLoud::Soloud *soloud = (SoLoud::Soloud *)pDevice->pUserData;
         soloud->mix((float *)pOutput, frameCount);
+
+        // Send output audio to AEC reference buffer (if callback is set)
+        if (g_aecOutputCallback != nullptr) {
+            g_aecOutputCallback((const float*)pOutput, frameCount, pDevice->playback.channels);
+        }
     }
 
     static void soloud_miniaudio_deinit(SoLoud::Soloud *aSoloud)
