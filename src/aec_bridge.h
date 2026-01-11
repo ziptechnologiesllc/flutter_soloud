@@ -19,19 +19,16 @@
 
 // Callback type for receiving audio output
 // Parameters: audio data (float*), frame count, channel count
-typedef void (*AECOutputCallback)(const float* data, size_t frameCount, unsigned int channels);
+typedef void (*AECOutputCallback)(const float *data, size_t frameCount,
+                                  unsigned int channels);
 
 // Global callback pointer (set by flutter_recorder)
 extern AECOutputCallback g_aecOutputCallback;
 
 // Set the output callback (called from flutter_recorder)
-inline void aec_setOutputCallback(AECOutputCallback callback) {
-    g_aecOutputCallback = callback;
-}
+void aec_setOutputCallback(AECOutputCallback callback);
 
 // Clear the output callback
-inline void aec_clearOutputCallback() {
-    g_aecOutputCallback = nullptr;
-}
+void aec_clearOutputCallback();
 
 #endif // AEC_BRIDGE_H
