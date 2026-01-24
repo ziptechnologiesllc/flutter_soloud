@@ -27,6 +27,7 @@ freely, subject to the following restrictions:
 
 #include <stdlib.h> // rand
 #include <math.h> // sin
+#include <atomic>
 
 #ifdef SOLOUD_NO_ASSERTS
 #define SOLOUD_ASSERT(x)
@@ -153,16 +154,22 @@ namespace SoLoud
 namespace SoLoud
 {
 
+	// Forward declarations for lock-free audio
+	class CommandQueue;
+	class VoiceSlotAllocator;
+
 	// Soloud core class.
 	class Soloud
 	{
 	public:
 		// Back-end data; content is up to the back-end implementation.
 		void * mBackendData;
-		// Pointer for the audio thread mutex.
+		// Pointer for the audio thread mutex (only used in non-slave mode).
 		void * mAudioThreadMutex;
 		// Flag for when we're inside the mutex, used for debugging.
 		bool mInsideAudioThreadMutex;
+		// Lock-free mode flag (slave mode uses command queue instead of mutex)
+		std::atomic<bool> mLockFreeMode;
 		// Called by SoLoud to shut down the back-end. If NULL, not called. Should be set by back-end.
 		soloudCallFunction mBackendCleanupFunc;
 
@@ -609,6 +616,16 @@ namespace SoLoud
 		unsigned int mActiveVoiceCount;
 		// Active voices list needs to be recalculated
 		bool mActiveVoiceDirty;
+
+		// Lock-free command queue (used in slave mode instead of mutex)
+		CommandQueue* mCommandQueue;
+		// Lock-free voice slot allocator (used in slave mode)
+		VoiceSlotAllocator* mVoiceSlotAllocator;
+
+		// Process pending commands from the queue (called by audio thread)
+		void processCommandQueue_internal();
+		// Enable lock-free mode (called by slave mode init)
+		void enableLockFreeMode();
 	};
 };
 

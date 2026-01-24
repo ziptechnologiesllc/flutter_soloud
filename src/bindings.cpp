@@ -239,6 +239,44 @@ extern "C"
         return (PlayerErrors)noError;
     }
 
+    /// Initialize the engine in slave mode (no audio device created).
+    /// In slave mode, SoLoud's audio output is driven by an external callback
+    /// (typically from the Capture plugin's duplex device). This ensures perfect
+    /// clock synchronization for AEC on Linux.
+    ///
+    /// [sampleRate] the sample rate to use (should match capture device).
+    /// [bufferSize] the audio buffer size.
+    /// [channels] 1=mono, 2=stereo, 4=quad, 6=5.1, 8=7.1.
+    ///
+    /// Returns [PlayerErrors.noError] if success.
+    FFI_PLUGIN_EXPORT enum PlayerErrors initEngineSlave(
+        unsigned int sampleRate,
+        unsigned int bufferSize,
+        unsigned int channels)
+    {
+        std::lock_guard<std::mutex> guard(init_deinit_mutex);
+        std::lock_guard<std::mutex> guard_load(loadMutex);
+
+        if (player.get() == nullptr)
+            player = std::make_unique<Player>();
+
+        player.get()->setStateChangedCallback(stateChangedCallback);
+        PlayerErrors res = (PlayerErrors)player.get()->initSlave(sampleRate, bufferSize, channels);
+        if (res != noError)
+            return res;
+
+        // Set window size for filters
+        const int windowSize = (player.get()->soloud.getBackendBufferSize() /
+                                player.get()->soloud.getBackendChannels()) -
+                               1;
+        analyzer.get()->setWindowsSize(windowSize);
+
+        // Set the callback for when a voice is ended/stopped
+        player.get()->setVoiceEndedCallback(voiceEndedCallback);
+
+        return (PlayerErrors)noError;
+    }
+
     /// Change the playback device.
     ///
     /// [deviceID] the device ID. -1 for default OS output device.

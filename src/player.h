@@ -43,6 +43,17 @@ public:
     /// @return Returns [PlayerErrors.SO_NO_ERROR] if success.
     PlayerErrors init(unsigned int sampleRate, unsigned int bufferSize, unsigned int channels, int deviceID = -1);
 
+    /// @brief Initialize the player in slave mode (no audio device created).
+    /// In slave mode, SoLoud's audio output is driven by an external callback
+    /// (typically from the Capture plugin's duplex device). This ensures perfect
+    /// clock synchronization for AEC on Linux where separate audio devices
+    /// have independent clocks that drift apart.
+    /// @param sampleRate sample rate to match the capture device.
+    /// @param bufferSize the audio buffer size.
+    /// @param channels number of channels.
+    /// @return Returns [PlayerErrors.SO_NO_ERROR] if success.
+    PlayerErrors initSlave(unsigned int sampleRate, unsigned int bufferSize, unsigned int channels);
+
     /// @brief Change the playback device.
     /// @param deviceID the device ID. -1 for default OS output device.
     PlayerErrors changeDevice(int deviceID);

@@ -218,6 +218,27 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
       _initEnginePtr.asFunction<int Function(int, int, int, int)>();
 
   @override
+  PlayerErrors initEngineSlave(
+    int sampleRate,
+    int bufferSize,
+    Channels channels,
+  ) {
+    final ret = _initEngineSlave(
+      sampleRate,
+      bufferSize,
+      channels.count,
+    );
+    return PlayerErrors.values[ret];
+  }
+
+  late final _initEngineSlavePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(ffi.UnsignedInt, ffi.UnsignedInt,
+              ffi.UnsignedInt)>>('initEngineSlave');
+  late final _initEngineSlave =
+      _initEngineSlavePtr.asFunction<int Function(int, int, int)>();
+
+  @override
   PlayerErrors changeDevice(int deviceId) {
     final ret = _changeDevice(deviceId);
     return PlayerErrors.values[ret];

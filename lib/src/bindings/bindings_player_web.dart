@@ -119,6 +119,21 @@ class FlutterSoLoudWeb extends FlutterSoLoud {
   }
 
   @override
+  PlayerErrors initEngineSlave(
+    int sampleRate,
+    int bufferSize,
+    Channels channels,
+  ) {
+    // Slave mode is not supported on web - it's a Linux-specific feature
+    // for AEC clock synchronization. Web doesn't need this because
+    // the browser handles audio device synchronization.
+    throw UnsupportedError(
+      'initEngineSlave is not supported on web. '
+      'Use initEngine instead.',
+    );
+  }
+
+  @override
   PlayerErrors changeDevice(int deviceId) {
     final ret = wasmChangeDevice(deviceId);
     return PlayerErrors.values[ret];

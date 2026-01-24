@@ -24,6 +24,7 @@ freely, subject to the following restrictions:
 
 #include <string.h>
 #include "soloud_internal.h"
+#include "soloud_lockfree.h"
 
 // Core "basic" operations - play, stop, etc
 
@@ -42,9 +43,77 @@ namespace SoLoud
 		aSound.mSoloud = this;
 		SoLoud::AudioSourceInstance *instance = aSound.createInstance();
 
+		// Lock-free mode: use command queue instead of mutex
+		if (mLockFreeMode.load(std::memory_order_acquire) && mVoiceSlotAllocator && mCommandQueue)
+		{
+			// Reserve a voice slot atomically (no lock needed)
+			int ch = mVoiceSlotAllocator->reserveSlot();
+			if (ch < 0)
+			{
+				delete instance;
+				return UNKNOWN_ERROR;
+			}
+
+			// Assign audio source ID (atomic increment would be safer but this is rarely contended)
+			if (!aSound.mAudioSourceID)
+			{
+				aSound.mAudioSourceID = mAudioSourceID++;
+			}
+
+			// Initialize the instance (safe from main thread - instance isn't in mVoice yet)
+			instance->mAudioSourceID = aSound.mAudioSourceID;
+			instance->mBusHandle = aBus;
+			instance->init(aSound, mPlayIndex);
+			m3dData[ch].init(aSound);
+
+			// Create filters on the instance
+			for (int i = 0; i < FILTERS_PER_STREAM; i++)
+			{
+				if (aSound.mFilter[i])
+				{
+					instance->mFilter[i] = aSound.mFilter[i]->createInstance();
+				}
+			}
+
+			// Capture play index BEFORE incrementing (this is the index for this voice)
+			unsigned int thisPlayIndex = mPlayIndex;
+
+			// Increment play index for next voice
+			mPlayIndex++;
+			if (mPlayIndex == 0xfffff)
+			{
+				mPlayIndex = 0;
+			}
+
+			// Queue the play command for the audio thread
+			AudioCommand cmd;
+			cmd.type = CMD_PLAY;
+			cmd.voiceIndex = ch;
+			cmd.handle = 0; // Not used for CMD_PLAY
+			cmd.params.play.volume = (aVolume < 0) ? aSound.mVolume : aVolume;
+			cmd.params.play.pan = aPan;
+			cmd.params.play.paused = aPaused;
+			cmd.instancePtr = instance;
+
+			if (!mCommandQueue->tryPush(cmd))
+			{
+				// Queue full - this shouldn't happen with properly sized queue
+				mVoiceSlotAllocator->cancelReservation(ch);
+				delete instance;
+				return UNKNOWN_ERROR;
+			}
+
+			// Compute handle directly (can't use getHandleFromVoice_internal because
+			// mVoice[ch] isn't set yet - it will be set by the audio thread)
+			// Handle format: lower 12 bits = voice+1, upper bits = play index
+			handle h = (ch + 1) | (thisPlayIndex << 12);
+			return h;
+		}
+
+		// Original mutex-based path for non-slave mode
 		lockAudioMutex_internal();
 		int ch = findFreeVoice_internal();
-		if (ch < 0) 
+		if (ch < 0)
 		{
 			unlockAudioMutex_internal();
 			delete instance;
@@ -64,7 +133,7 @@ namespace SoLoud
 		mPlayIndex++;
 
 		// 20 bits, skip the last one (top bits full = voice group)
-		if (mPlayIndex == 0xfffff) 
+		if (mPlayIndex == 0xfffff)
 		{
 			mPlayIndex = 0;
 		}
@@ -84,7 +153,7 @@ namespace SoLoud
 			setVoiceVolume_internal(ch, aVolume);
 		}
 
-		// Fix initial voice volume ramp up		
+		// Fix initial voice volume ramp up
 		int i;
 		for (i = 0; i < MAX_CHANNELS; i++)
 		{
@@ -92,7 +161,7 @@ namespace SoLoud
 		}
 
 		setVoiceRelativePlaySpeed_internal(ch, 1);
-		
+
 		for (i = 0; i < FILTERS_PER_STREAM; i++)
 		{
 			if (aSound.mFilter[i])
@@ -139,6 +208,19 @@ namespace SoLoud
 
 	result Soloud::seek(handle aVoiceHandle, time aSeconds)
 	{
+		// In lock-free mode, queue the command for the audio thread
+		if (mLockFreeMode.load(std::memory_order_acquire) && mCommandQueue)
+		{
+			AudioCommand cmd;
+			cmd.type = CMD_SEEK;
+			cmd.voiceIndex = -1;
+			cmd.handle = aVoiceHandle;
+			cmd.params.seek.position = aSeconds;
+			cmd.instancePtr = nullptr;
+			mCommandQueue->tryPush(cmd);
+			return SO_NO_ERROR;
+		}
+
 		result res = SO_NO_ERROR;
 		result singleres = SO_NO_ERROR;
 		FOR_ALL_VOICES_PRE
@@ -152,6 +234,18 @@ namespace SoLoud
 
 	void Soloud::stop(handle aVoiceHandle)
 	{
+		// In lock-free mode, queue the command for the audio thread
+		if (mLockFreeMode.load(std::memory_order_acquire) && mCommandQueue)
+		{
+			AudioCommand cmd;
+			cmd.type = CMD_STOP;
+			cmd.voiceIndex = -1;
+			cmd.handle = aVoiceHandle;
+			cmd.instancePtr = nullptr;
+			mCommandQueue->tryPush(cmd);
+			return;
+		}
+
 		FOR_ALL_VOICES_PRE
 			stopVoice_internal(ch);
 		FOR_ALL_VOICES_POST

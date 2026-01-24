@@ -23,6 +23,7 @@ freely, subject to the following restrictions:
 */
 
 #include "soloud_internal.h"
+#include "soloud_lockfree.h"
 
 // Setters - set various bits of SoLoud state
 
@@ -47,6 +48,19 @@ namespace SoLoud
 
 	result Soloud::setRelativePlaySpeed(handle aVoiceHandle, float aSpeed)
 	{
+		// In lock-free mode, queue the command for the audio thread
+		if (mLockFreeMode.load(std::memory_order_acquire) && mCommandQueue)
+		{
+			AudioCommand cmd;
+			cmd.type = CMD_SET_SPEED;
+			cmd.voiceIndex = -1; // Not used
+			cmd.handle = aVoiceHandle;
+			cmd.params.setFloat.value = aSpeed;
+			cmd.instancePtr = nullptr;
+			mCommandQueue->tryPush(cmd);
+			return SO_NO_ERROR;
+		}
+
 		result retVal = 0;
 		FOR_ALL_VOICES_PRE
 			mVoice[ch]->mRelativePlaySpeedFader.mActive = 0;
@@ -65,6 +79,19 @@ namespace SoLoud
 
 	void Soloud::setPause(handle aVoiceHandle, bool aPause)
 	{
+		// In lock-free mode, queue the command for the audio thread
+		if (mLockFreeMode.load(std::memory_order_acquire) && mCommandQueue)
+		{
+			AudioCommand cmd;
+			cmd.type = CMD_SET_PAUSE;
+			cmd.voiceIndex = -1; // Not used
+			cmd.handle = aVoiceHandle;
+			cmd.params.setBool.value = aPause;
+			cmd.instancePtr = nullptr;
+			mCommandQueue->tryPush(cmd);
+			return;
+		}
+
 		FOR_ALL_VOICES_PRE
 			setVoicePause_internal(ch, aPause);
 		FOR_ALL_VOICES_POST
@@ -117,7 +144,20 @@ namespace SoLoud
 	}
 
 	void Soloud::setPan(handle aVoiceHandle, float aPan)
-	{		
+	{
+		// In lock-free mode, queue the command for the audio thread
+		if (mLockFreeMode.load(std::memory_order_acquire) && mCommandQueue)
+		{
+			AudioCommand cmd;
+			cmd.type = CMD_SET_PAN;
+			cmd.voiceIndex = -1; // Not used
+			cmd.handle = aVoiceHandle;
+			cmd.params.setFloat.value = aPan;
+			cmd.instancePtr = nullptr;
+			mCommandQueue->tryPush(cmd);
+			return;
+		}
+
 		FOR_ALL_VOICES_PRE
 			mVoice[ch]->mPanFader.mActive = 0;
 			setVoicePan_internal(ch, aPan);
@@ -188,6 +228,19 @@ namespace SoLoud
 
 	void Soloud::setLooping(handle aVoiceHandle, bool aLooping)
 	{
+		// In lock-free mode, queue the command for the audio thread
+		if (mLockFreeMode.load(std::memory_order_acquire) && mCommandQueue)
+		{
+			AudioCommand cmd;
+			cmd.type = CMD_SET_LOOPING;
+			cmd.voiceIndex = -1; // Not used
+			cmd.handle = aVoiceHandle;
+			cmd.params.setBool.value = aLooping;
+			cmd.instancePtr = nullptr;
+			mCommandQueue->tryPush(cmd);
+			return;
+		}
+
 		FOR_ALL_VOICES_PRE
 			if (aLooping)
 			{
@@ -216,6 +269,19 @@ namespace SoLoud
 
 	void Soloud::setVolume(handle aVoiceHandle, float aVolume)
 	{
+		// In lock-free mode, queue the command for the audio thread
+		if (mLockFreeMode.load(std::memory_order_acquire) && mCommandQueue)
+		{
+			AudioCommand cmd;
+			cmd.type = CMD_SET_VOLUME;
+			cmd.voiceIndex = -1; // Not used
+			cmd.handle = aVoiceHandle;
+			cmd.params.setFloat.value = aVolume;
+			cmd.instancePtr = nullptr;
+			mCommandQueue->tryPush(cmd);
+			return;
+		}
+
 		FOR_ALL_VOICES_PRE
 			mVoice[ch]->mVolumeFader.mActive = 0;
 			setVoiceVolume_internal(ch, aVolume);
@@ -224,6 +290,19 @@ namespace SoLoud
 
 	void Soloud::setDelaySamples(handle aVoiceHandle, unsigned int aSamples)
 	{
+		// In lock-free mode, queue the command for the audio thread
+		if (mLockFreeMode.load(std::memory_order_acquire) && mCommandQueue)
+		{
+			AudioCommand cmd;
+			cmd.type = CMD_SET_DELAY;
+			cmd.voiceIndex = -1; // Not used
+			cmd.handle = aVoiceHandle;
+			cmd.params.setUint.value = aSamples;
+			cmd.instancePtr = nullptr;
+			mCommandQueue->tryPush(cmd);
+			return;
+		}
+
 		FOR_ALL_VOICES_PRE
 			mVoice[ch]->mDelaySamples = aSamples;
 		FOR_ALL_VOICES_POST

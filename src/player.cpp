@@ -1,6 +1,7 @@
 #include "common.h"
 #include "player.h"
 #include "soloud.h"
+#include "soloud_internal.h"
 #include "soloud_wav.h"
 // #include "soloud_thread.h"
 #include "soloud_wavstream.h"
@@ -61,6 +62,35 @@ PlayerErrors Player::init(unsigned int sampleRate, unsigned int bufferSize, unsi
         result = soloud.init(
             SoLoud::Soloud::CLIP_ROUNDOFF,
             SoLoud::Soloud::MINIAUDIO, sampleRate, bufferSize, channels, playbackInfos_id);
+    } catch (...) {
+        return backendNotInited;
+    }
+
+    if (result == SoLoud::SO_NO_ERROR)
+    {
+        mInited = true;
+        mSampleRate = sampleRate;
+        mBufferSize = bufferSize;
+        mChannels = channels;
+    }
+    else
+        result = backendNotInited;
+    return (PlayerErrors)result;
+}
+
+PlayerErrors Player::initSlave(unsigned int sampleRate, unsigned int bufferSize, unsigned int channels)
+{
+    if (mInited)
+        return playerAlreadyInited;
+
+    // Initialize SoLoud in slave mode - no audio device created.
+    // The Capture plugin's duplex device will drive audio output.
+    SoLoud::result result;
+    try {
+        result = SoLoud::miniaudio_init_slave(
+            &soloud,
+            SoLoud::Soloud::CLIP_ROUNDOFF,
+            sampleRate, bufferSize, channels);
     } catch (...) {
         return backendNotInited;
     }

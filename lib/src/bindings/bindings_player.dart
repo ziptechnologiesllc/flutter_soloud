@@ -88,6 +88,24 @@ abstract class FlutterSoLoud {
     Channels channels,
   );
 
+  /// Initialize the engine in slave mode (no audio device created).
+  /// In slave mode, SoLoud's audio output is driven by an external callback
+  /// (typically from the Capture plugin's duplex device). This ensures perfect
+  /// clock synchronization for AEC on Linux where separate audio devices
+  /// have independent clocks that drift apart.
+  ///
+  /// [sampleRate] sample rate to match the capture device.
+  /// [bufferSize] the audio buffer size.
+  /// [channels] mono, stereo, quad, 5.1, 7.1.
+  ///
+  /// Returns [PlayerErrors.noError] if success.
+  @mustBeOverridden
+  PlayerErrors initEngineSlave(
+    int sampleRate,
+    int bufferSize,
+    Channels channels,
+  );
+
   /// Change the playback device.
   ///
   /// [deviceId] the device ID. -1 for default OS output device.

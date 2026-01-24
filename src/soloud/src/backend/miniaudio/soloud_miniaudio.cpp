@@ -22,9 +22,34 @@ misrepresented as being the original software.
 distribution.
 */
 #include <stdlib.h>
+#include <string.h>
+#include <vector>
+
+#ifdef __ANDROID__
+#include <android/log.h>
+#define SOLOUD_TAG "FlutterSoLoud"
+#endif
 
 #include "../../../../aec_bridge.h"
 #include "soloud.h"
+#include "soloud_thread.h"
+
+// Dynamic symbol lookup for slave bridge (flutter_recorder is a separate library)
+// We use dlsym to find the registration functions at runtime since the plugins
+// don't link against each other.
+#ifndef _WIN32
+#include <dlfcn.h>
+#endif
+
+// Slave bridge callback type (must match flutter_recorder's soloud_slave_bridge.h)
+typedef void (*SoloudSlaveMixCallback)(float *output, unsigned int frameCount,
+                                       unsigned int channels);
+typedef void (*SoloudRegisterSlaveCallbackFn)(SoloudSlaveMixCallback callback);
+typedef void (*SoloudUnregisterSlaveCallbackFn)(void);
+
+// Cached function pointers for slave bridge (looked up once at init)
+static SoloudRegisterSlaveCallbackFn g_registerSlaveCallback = nullptr;
+static SoloudUnregisterSlaveCallbackFn g_unregisterSlaveCallback = nullptr;
 
 #if !defined(WITH_MINIAUDIO)
 
@@ -66,6 +91,13 @@ namespace SoLoud {
 ma_device gDevice;
 SoLoud::Soloud *soloud;
 ma_context context;
+
+// Slave mode: When true, SoLoud doesn't own an audio device.
+// Instead, Capture's duplex device calls our mix function directly.
+// This ensures perfect clock synchronization for AEC on Linux.
+static bool gSlaveMode = false;
+static unsigned int gSlaveChannels = 2;
+static unsigned int gSlaveSamplerate = 48000;
 
 // Added by Marco Bavagnoli
 void on_notification(const ma_device_notification *pNotification) {
@@ -142,6 +174,15 @@ void soloud_miniaudio_audiomixer(ma_device *pDevice, void *pOutput,
 }
 
 static void soloud_miniaudio_deinit(SoLoud::Soloud *aSoloud) {
+  // In slave mode, we don't own a device
+  if (gSlaveMode) {
+    if (g_unregisterSlaveCallback != nullptr) {
+      g_unregisterSlaveCallback();
+    }
+    gSlaveMode = false;
+    return;
+  }
+
   ma_device_stop(&gDevice);
   ma_device_uninit(&gDevice);
 #if defined(MA_HAS_COREAUDIO)
@@ -152,6 +193,8 @@ static void soloud_miniaudio_deinit(SoLoud::Soloud *aSoloud) {
 result miniaudio_init(SoLoud::Soloud *aSoloud, unsigned int aFlags,
                       unsigned int aSamplerate, unsigned int aBuffer,
                       unsigned int aChannels, void *pPlaybackInfos_id) {
+  // Ensure we're not in slave mode when using normal init
+  gSlaveMode = false;
   soloud = aSoloud;
   ma_device_config deviceConfig =
       ma_device_config_init(ma_device_type_playback);
@@ -233,6 +276,10 @@ result miniaudio_ensureDeviceStarted_impl() {
   if (soloud == nullptr)
     return UNKNOWN_ERROR;
 
+  // In slave mode, we don't own the device
+  if (gSlaveMode)
+    return 0;
+
   // Check if device is stopped and start it if needed
   if (ma_device_get_state(&gDevice) == ma_device_state_stopped) {
     ma_result result = ma_device_start(&gDevice);
@@ -242,5 +289,240 @@ result miniaudio_ensureDeviceStarted_impl() {
   }
   return 0;
 }
+
+// =============================================================================
+// SLAVE MODE - For unified audio device (Linux AEC clock synchronization)
+// =============================================================================
+
+// Callback function that Capture's data_callback will invoke to get mixed audio.
+// This is registered with the slave bridge when slave mode is initialized.
+static void soloud_slave_mix_callback(float *output, unsigned int frameCount,
+                                      unsigned int channels) {
+  if (soloud == nullptr) {
+    // No SoLoud instance - fill with silence
+    memset(output, 0, frameCount * channels * sizeof(float));
+    return;
+  }
+
+  unsigned int soloudChannels = soloud->getBackendChannels();
+
+  // Debug log first few callbacks to diagnose channel issues
+  static int mixDebugCount = 0;
+  if (mixDebugCount < 5) {
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_INFO, SOLOUD_TAG,
+                        "[SoLoud Slave Mix] SoLoud channels=%u, output channels=%u, frames=%u",
+                        soloudChannels, channels, frameCount);
+#else
+    fprintf(stderr, "[SoLoud Slave Mix] SoLoud channels=%u, output channels=%u, frames=%u\n",
+            soloudChannels, channels, frameCount);
+    fflush(stderr);
+#endif
+    mixDebugCount++;
+  }
+
+  if (soloudChannels == channels) {
+    // Channels match - mix directly into output buffer
+    soloud->mix(output, frameCount);
+  } else if (soloudChannels == 1 && channels == 2) {
+    // SoLoud is mono, but device is stereo - mix to temp buffer then expand
+    // Use a thread-local static buffer to avoid allocation in audio callback
+    static thread_local std::vector<float> monoBuffer;
+    if (monoBuffer.size() < frameCount) {
+      monoBuffer.resize(frameCount);
+    }
+
+    // Mix mono into temp buffer
+    soloud->mix(monoBuffer.data(), frameCount);
+
+    // Expand mono to stereo: copy each sample to both L and R
+    for (unsigned int i = 0; i < frameCount; i++) {
+      output[i * 2] = monoBuffer[i];
+      output[i * 2 + 1] = monoBuffer[i];
+    }
+  } else if (soloudChannels == 2 && channels == 1) {
+    // SoLoud is stereo, but device is mono - mix then downmix
+    static thread_local std::vector<float> stereoBuffer;
+    if (stereoBuffer.size() < frameCount * 2) {
+      stereoBuffer.resize(frameCount * 2);
+    }
+
+    // Mix stereo into temp buffer
+    soloud->mix(stereoBuffer.data(), frameCount);
+
+    // Downmix stereo to mono: average L and R
+    for (unsigned int i = 0; i < frameCount; i++) {
+      output[i] = (stereoBuffer[i * 2] + stereoBuffer[i * 2 + 1]) * 0.5f;
+    }
+  } else {
+    // Unsupported channel combination - fill with silence and log error
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_ERROR, SOLOUD_TAG,
+                        "[SoLoud Slave Mix] ERROR: Unsupported channel combo: soloud=%u, output=%u",
+                        soloudChannels, channels);
+#else
+    fprintf(stderr, "[SoLoud Slave Mix] ERROR: Unsupported channel combo: soloud=%u, output=%u\n",
+            soloudChannels, channels);
+    fflush(stderr);
+#endif
+    memset(output, 0, frameCount * channels * sizeof(float));
+  }
+
+  // Note: In slave mode, we do NOT call the AEC output callback here.
+  // The Capture plugin will write to the AEC reference buffer directly
+  // in its callback, ensuring perfect frame-level synchronization.
+  // This is the whole point of slave mode - one callback, one clock.
+}
+
+// Dynamically look up slave bridge symbols from flutter_recorder library
+// This is needed because the plugins are separate shared libraries.
+// Flutter loads plugins with RTLD_LOCAL, so we need to explicitly dlopen
+// the library to get a handle we can use for symbol lookup.
+static void *g_flutterRecorderHandle = nullptr;
+
+static bool lookupSlaveBridgeSymbols() {
+#ifndef _WIN32
+  if (g_registerSlaveCallback != nullptr) {
+    return true;  // Already looked up
+  }
+
+  // Flutter loads plugins with RTLD_LOCAL, so RTLD_DEFAULT won't find them.
+  // We need to explicitly open the library to get a handle for dlsym.
+  // RTLD_NOLOAD ensures we don't load a second copy - we just get a handle
+  // to the already-loaded library.
+  const char *libNames[] = {
+      "libflutter_recorder.so",           // Standard name
+      "./lib/libflutter_recorder.so",     // Relative to executable
+      nullptr
+  };
+
+  for (int i = 0; libNames[i] != nullptr; i++) {
+    g_flutterRecorderHandle = dlopen(libNames[i], RTLD_NOW | RTLD_NOLOAD);
+    if (g_flutterRecorderHandle != nullptr) {
+      fprintf(stderr, "[SoLoud Slave] Found flutter_recorder library: %s\n",
+              libNames[i]);
+      fflush(stderr);
+      break;
+    }
+  }
+
+  if (g_flutterRecorderHandle == nullptr) {
+    // Try without RTLD_NOLOAD - maybe it wasn't loaded yet?
+    // This shouldn't happen if init order is correct, but let's be safe.
+    for (int i = 0; libNames[i] != nullptr; i++) {
+      g_flutterRecorderHandle = dlopen(libNames[i], RTLD_NOW);
+      if (g_flutterRecorderHandle != nullptr) {
+        fprintf(stderr, "[SoLoud Slave] Loaded flutter_recorder library: %s\n",
+                libNames[i]);
+        fflush(stderr);
+        break;
+      }
+    }
+  }
+
+  if (g_flutterRecorderHandle == nullptr) {
+    fprintf(stderr, "[SoLoud Slave] ERROR: Could not open flutter_recorder "
+            "library: %s\n", dlerror());
+    fflush(stderr);
+    return false;
+  }
+
+  // Look up symbols using the library handle
+  g_registerSlaveCallback = (SoloudRegisterSlaveCallbackFn)dlsym(
+      g_flutterRecorderHandle, "soloud_registerSlaveMixCallback");
+  g_unregisterSlaveCallback = (SoloudUnregisterSlaveCallbackFn)dlsym(
+      g_flutterRecorderHandle, "soloud_unregisterSlaveMixCallback");
+
+  if (g_registerSlaveCallback == nullptr) {
+    fprintf(stderr, "[SoLoud Slave] ERROR: Could not find "
+            "soloud_registerSlaveMixCallback symbol: %s\n", dlerror());
+    fflush(stderr);
+    dlclose(g_flutterRecorderHandle);
+    g_flutterRecorderHandle = nullptr;
+    return false;
+  }
+
+  if (g_unregisterSlaveCallback == nullptr) {
+    fprintf(stderr, "[SoLoud Slave] WARNING: Could not find "
+            "soloud_unregisterSlaveMixCallback symbol\n");
+    fflush(stderr);
+  }
+
+  fprintf(stderr, "[SoLoud Slave] Successfully found slave bridge symbols\n");
+  fflush(stderr);
+  return true;
+#else
+  // Windows: slave mode not supported (WASAPI handles clock sync)
+  fprintf(stderr, "[SoLoud Slave] Slave mode not supported on Windows\n");
+  return false;
+#endif
+}
+
+// Deinit function for slave mode
+static void soloud_slave_deinit(SoLoud::Soloud *aSoloud) {
+  fprintf(stderr, "[SoLoud Slave] Deinitializing slave mode\n");
+  fflush(stderr);
+
+  // Unregister the slave callback using dynamically looked up function
+  if (g_unregisterSlaveCallback != nullptr) {
+    g_unregisterSlaveCallback();
+  }
+  gSlaveMode = false;
+}
+
+// Initialize SoLoud in slave mode (no audio device created)
+// The Capture plugin's duplex device will drive audio output.
+result miniaudio_init_slave(SoLoud::Soloud *aSoloud, unsigned int aFlags,
+                            unsigned int aSamplerate, unsigned int aBuffer,
+                            unsigned int aChannels) {
+  fprintf(stderr,
+          "[SoLoud Slave] Initializing slave mode: samplerate=%u, buffer=%u, "
+          "channels=%u\n",
+          aSamplerate, aBuffer, aChannels);
+  fflush(stderr);
+
+  // First, look up the slave bridge symbols from flutter_recorder
+  if (!lookupSlaveBridgeSymbols()) {
+    fprintf(stderr, "[SoLoud Slave] Failed to find slave bridge symbols. "
+            "Make sure flutter_recorder is initialized first.\n");
+    fflush(stderr);
+    return UNKNOWN_ERROR;
+  }
+
+  soloud = aSoloud;
+  gSlaveMode = true;
+  gSlaveChannels = aChannels;
+  gSlaveSamplerate = aSamplerate;
+
+  // Enable lock-free mode for slave operation
+  // Instead of using a mutex (which can cause audio thread blocking),
+  // we use a lock-free command queue for thread synchronization.
+  aSoloud->enableLockFreeMode();
+  fprintf(stderr, "[SoLoud Slave] Enabled lock-free mode\n");
+  fflush(stderr);
+
+  // Initialize SoLoud's internal state without creating a device
+  aSoloud->postinit_internal(aSamplerate, aBuffer, aFlags, aChannels);
+
+  // Set cleanup function
+  aSoloud->mBackendCleanupFunc = soloud_slave_deinit;
+
+  // Register our mix callback with the slave bridge
+  // Capture's data_callback will call this to get mixed audio
+  g_registerSlaveCallback(soloud_slave_mix_callback);
+
+  aSoloud->mBackendString = "MiniAudio (Slave Mode)";
+
+  fprintf(stderr,
+          "[SoLoud Slave] Slave mode initialized successfully. Waiting for "
+          "Capture to drive audio.\n");
+  fflush(stderr);
+
+  return 0;
+}
+
+// Check if SoLoud is in slave mode
+bool miniaudio_isSlaveMode_impl() { return gSlaveMode; }
+
 }; // namespace SoLoud
 #endif
