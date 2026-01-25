@@ -599,6 +599,59 @@ extern "C"
         return player.get()->addAudioDataStream(hash, data, aDataLen);
     }
 
+    //////////////////////////////////////////////////////////////
+    /// NATIVE AUDIO SINK - Direct native-to-native audio streaming
+    /// This allows the recorder to feed audio directly to SoLoud
+    /// without crossing to Dart (avoiding UI thread contention).
+    //////////////////////////////////////////////////////////////
+
+    // Native sink callback type - matches the signature needed by recorder
+    typedef void (*NativeAudioSinkCallback)(const unsigned char* data, unsigned int dataLen, void* userData);
+
+    // Storage for the active native sink configuration
+    static unsigned int g_nativeSinkHash = 0;
+    static std::atomic<bool> g_nativeSinkActive{false};
+
+    /// Internal function called from native sink - adds audio data without Dart overhead
+    static void nativeAudioSinkCallback(const unsigned char* data, unsigned int dataLen, void* userData) {
+        if (!g_nativeSinkActive.load(std::memory_order_acquire)) return;
+        if (player.get() == nullptr || !player.get()->isInited()) return;
+
+        // Add data directly - this runs on the recorder's callback thread
+        player.get()->addAudioDataStream(g_nativeSinkHash, data, dataLen);
+    }
+
+    /// Configure the native audio sink for direct recorder-to-player streaming.
+    /// Call this after setBufferStream() to enable native-to-native audio path.
+    /// [hash] - the sound hash from setBufferStream
+    /// [callbackOut] - receives the native callback function pointer
+    /// [userDataOut] - receives user data pointer (pass to callback)
+    FFI_PLUGIN_EXPORT void soloud_configureNativeAudioSink(
+        unsigned int hash,
+        NativeAudioSinkCallback* callbackOut,
+        void** userDataOut)
+    {
+        g_nativeSinkHash = hash;
+        g_nativeSinkActive.store(true, std::memory_order_release);
+        *callbackOut = nativeAudioSinkCallback;
+        *userDataOut = nullptr;  // No extra user data needed
+        fprintf(stderr, "[SoLoud] Native audio sink configured for hash %u\n", hash);
+    }
+
+    /// Disable the native audio sink
+    FFI_PLUGIN_EXPORT void soloud_disableNativeAudioSink()
+    {
+        g_nativeSinkActive.store(false, std::memory_order_release);
+        g_nativeSinkHash = 0;
+        fprintf(stderr, "[SoLoud] Native audio sink disabled\n");
+    }
+
+    /// Check if native audio sink is active
+    FFI_PLUGIN_EXPORT bool soloud_isNativeAudioSinkActive()
+    {
+        return g_nativeSinkActive.load(std::memory_order_acquire);
+    }
+
     // Set the end of the data stream.
     // [hash] the hash of the stream sound.
     FFI_PLUGIN_EXPORT enum PlayerErrors setDataIsEnded(unsigned int hash)

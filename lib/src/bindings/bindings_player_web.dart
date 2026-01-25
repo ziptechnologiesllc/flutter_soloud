@@ -337,6 +337,27 @@ class FlutterSoLoudWeb extends FlutterSoLoud {
     return PlayerErrors.values[result];
   }
 
+  // ============================================================
+  // NATIVE AUDIO SINK - Not supported on web
+  // ============================================================
+
+  @override
+  ({int callbackAddress, int userDataAddress}) configureNativeAudioSinkRaw(
+      int soundHash) {
+    // Native audio sink not supported on web
+    return (callbackAddress: 0, userDataAddress: 0);
+  }
+
+  @override
+  void disableNativeAudioSink() {
+    // No-op on web
+  }
+
+  @override
+  bool isNativeAudioSinkActive() {
+    return false; // Never active on web
+  }
+
   @override
   PlayerErrors setDataIsEnded(SoundHash soundHash) {
     final result = wasmSetDataIsEnded(soundHash.hash);

@@ -22,8 +22,10 @@
 
 namespace SoLoud
 {
-	std::mutex buffer_lock_mutex;
-	std::mutex check_buffer_mutex;
+	// Global mutexes - ONLY used for non-audio-callback operations
+	// The audio callback (getAudio) does NOT use these to avoid priority inversion
+	std::mutex buffer_lock_mutex;   // For resetBuffer (called from main thread)
+	std::mutex check_buffer_mutex;  // For checkBuffering (called from main thread)
 
 	BufferStreamInstance::BufferStreamInstance(BufferStream *aParent)
 	{
@@ -38,11 +40,10 @@ namespace SoLoud
 
 	unsigned int BufferStreamInstance::getAudio(float *aBuffer, unsigned int aSamplesToRead, unsigned int aBufferSize)
 	{
-		std::lock_guard<std::mutex> lock(buffer_lock_mutex);
+		// LOCK-FREE AUDIO CALLBACK: Uses try_lock to avoid blocking
+		// If buffer is locked by addData, we return silence instead of blocking
 
-		// When using BufferType::AUTO, samplerate and channels are got from the stream. Hence we need to update them
-		// regardless of how are set by setBufferStream. But these parameters need to be set after the play
-		// function is called and the instance of this class is created.
+		// When using BufferType::AUTO, samplerate and channels are got from the stream
 		if (!samplerateAlreadySet && mParent->autoTypeSamplerate != 0.f) {
 			mBaseSamplerate = mParent->autoTypeSamplerate;
 			mSamplerate = mParent->autoTypeSamplerate;
@@ -50,98 +51,88 @@ namespace SoLoud
 			samplerateAlreadySet = true;
 		}
 
-		// This happens when using RELEASED buffer type
-		if (mParent->mBuffer.getFloatsBufferSize() == 0)
-		{
-			memset(aBuffer, 0, sizeof(float) * aSamplesToRead);
-			// Calculate mStreamPosition based on mOffset
+		// Calculate how many samples we need (interleaved)
+		size_t samplesNeeded = aSamplesToRead * mChannels;
+
+		// Temporary buffer for interleaved audio (we'll de-interleave for SoLoud)
+		// Stack allocation for small buffers, heap for large
+		float stackBuffer[4096];
+		float* tempBuffer = (samplesNeeded <= 4096) ? stackBuffer : new float[samplesNeeded];
+
+		// Use try_lock method to read audio data without blocking
+		bool gotLock = false;
+		bool shouldRemove = (mParent->mBuffer.bufferingType == BufferingType::RELEASED);
+		size_t samplesRead = mParent->mBuffer.readAudioData_trylock(
+			tempBuffer,
+			samplesNeeded,
+			mOffset,
+			shouldRemove,
+			&gotLock
+		);
+
+		// If we couldn't get the lock, return silence
+		if (!gotLock) {
+			memset(aBuffer, 0, sizeof(float) * aSamplesToRead * mChannels);
+			if (tempBuffer != stackBuffer) delete[] tempBuffer;
+			return 0;
+		}
+
+		// If no data available, return silence
+		if (samplesRead == 0) {
+			memset(aBuffer, 0, sizeof(float) * aSamplesToRead * mChannels);
 			mStreamPosition = mOffset / (float)(mBaseSamplerate * mChannels);
 
-			// This is not nice to do in the audio callback, but I didn't
-			// find a better way to get lenght and pause the sound and the
-			// `checkBuffering` function is fast enough.
-			if (!mParent->mIsBuffering)
-			{
+			// Check buffering status (this is safe since we're not holding any lock)
+			if (!mParent->mIsBuffering) {
 				mParent->mThePlayer->soloud.unlockAudioMutex_internal();
 				mParent->checkBuffering(0);
 				mParent->mThePlayer->soloud.lockAudioMutex_internal();
 			}
+
+			if (tempBuffer != stackBuffer) delete[] tempBuffer;
 			return 0;
 		}
 
-		unsigned int bufferSize = mParent->mBuffer.getFloatsBufferSize();
-		float *buffer = reinterpret_cast<float *>(mParent->mBuffer.buffer.data());
-		int samplesToRead = aSamplesToRead;
-		if (mOffset + (unsigned int)samplesToRead * mChannels > bufferSize)
-		{
-			samplesToRead = (bufferSize - mOffset) / mChannels;
-		}
-		if (samplesToRead <= 0)
-		{
-			memset(aBuffer, 0, sizeof(float) * aSamplesToRead * mChannels);
-			// Calculate mStreamPosition based on mOffset
-			mStreamPosition = mOffset / (float)(mBaseSamplerate * mChannels);
-
-			// This is not nice to do in the audio callback, but I didn't
-			// find a better way to get lenght and pause the sound and the
-			// `chakeBuffering` function is fast enough.
-			if (!mParent->mIsBuffering)
-			{
-				mParent->mThePlayer->soloud.unlockAudioMutex_internal();
-				mParent->checkBuffering(0);
-				mParent->mThePlayer->soloud.lockAudioMutex_internal();
-			}
-			return 0;
+		// Calculate actual samples per channel
+		unsigned int samplesToReturn = samplesRead / mChannels;
+		if (samplesToReturn > aSamplesToRead) {
+			samplesToReturn = aSamplesToRead;
 		}
 
-		if (samplesToRead != aSamplesToRead)
-		{
+		// Clear output buffer first if we're returning less than requested
+		if (samplesToReturn < aSamplesToRead) {
 			memset(aBuffer, 0, sizeof(float) * aSamplesToRead * mChannels);
 		}
 
-		if (mChannels == 1)
-		{
-			// Optimization: if we have a mono audio source, we can just copy all the data in one go.
-			memcpy(aBuffer, buffer + mOffset, sizeof(float) * samplesToRead);
-		}
-		else
-		{
-			// From SoLoud documentation:
-			// So, if 1024 samples are requested from a stereo audio source, the first 1024 floats
-			// should be for the first channel, and the next 1024 samples should be for the second channel.
-			unsigned int i, j;
-			for (j = 0; j < mChannels; j++)
-			{
-				for (i = 0; i < samplesToRead; i++)
-				{
-					aBuffer[j * aSamplesToRead + i] = buffer[mOffset + i * mChannels + j];
+		// De-interleave from tempBuffer to aBuffer (SoLoud format)
+		// SoLoud wants: [all ch0 samples][all ch1 samples]...
+		// We have: [ch0 ch1 ch0 ch1...]
+		if (mChannels == 1) {
+			memcpy(aBuffer, tempBuffer, sizeof(float) * samplesToReturn);
+		} else {
+			for (unsigned int ch = 0; ch < mChannels; ch++) {
+				for (unsigned int i = 0; i < samplesToReturn; i++) {
+					aBuffer[ch * aSamplesToRead + i] = tempBuffer[i * mChannels + ch];
 				}
 			}
 		}
 
-		unsigned int totalBytesRead = samplesToRead * mChannels * sizeof(float);
-		size_t samplesRemoved = mParent->mBuffer.removeData(totalBytesRead);
+		// Update stream position
+		mStreamTime += samplesToReturn / (float)mBaseSamplerate;
 
-		// Update stream position regardless of buffering type
-		mStreamTime += samplesToRead / (float)mBaseSamplerate;
-
-		// If buffering type is RELEASED, adjust mSampleCount and don't increment mOffset
-		if (mParent->mBuffer.bufferingType == BufferingType::RELEASED)
-		{
-			mParent->mSampleCount -= samplesRemoved / mParent->mPCMformat.bytesPerSample;
-			// For RELEASED type, streamPosition is always at the start of the remaining buffer
+		if (shouldRemove) {
+			// RELEASED mode: data was already removed by readAudioData_trylock
+			mParent->mSampleCount -= samplesRead / mParent->mPCMformat.bytesPerSample;
 			mStreamPosition = 0;
-			mParent->mBytesConsumed += totalBytesRead;
-		}
-		else
-		{
-			mOffset += samplesToRead * mChannels;
-			// For PRESERVED type, streamPosition advances with the offset
-			// mStreamPosition = mOffset / (float)(sizeof(float) * mBaseSamplerate * mChannels);
+			mParent->mBytesConsumed += samplesRead * sizeof(float);
+		} else {
+			// PRESERVED mode: advance offset
+			mOffset += samplesRead;
 			mStreamPosition = mOffset / (float)(mBaseSamplerate * mChannels);
 		}
 
-		return samplesToRead;
+		if (tempBuffer != stackBuffer) delete[] tempBuffer;
+		return samplesToReturn;
 	}
 
 	result BufferStreamInstance::seek(double aSeconds, float *mScratch, unsigned int mScratchSize)

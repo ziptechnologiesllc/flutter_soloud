@@ -614,6 +614,65 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
   late final _addAudioDataStream = _addAudioDataStreamPtr
       .asFunction<int Function(int, ffi.Pointer<ffi.Uint8>, int)>();
 
+  // ============================================================
+  // NATIVE AUDIO SINK - Direct native-to-native streaming
+  // ============================================================
+
+  /// Configure native audio sink for direct recorder-to-player streaming.
+  /// Returns callback and userData pointer addresses that should be passed to
+  /// flutter_recorder_setNativeAudioSink.
+  @override
+  ({int callbackAddress, int userDataAddress}) configureNativeAudioSinkRaw(
+      int soundHash) {
+    final callbackPtr = calloc<ffi.Pointer<ffi.Void>>();
+    final userDataPtr = calloc<ffi.Pointer<ffi.Void>>();
+
+    _configureNativeAudioSink(soundHash, callbackPtr, userDataPtr);
+
+    final result = (
+      callbackAddress: callbackPtr.value.address,
+      userDataAddress: userDataPtr.value.address,
+    );
+
+    calloc.free(callbackPtr);
+    calloc.free(userDataPtr);
+    return result;
+  }
+
+  late final _configureNativeAudioSinkPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.UnsignedInt,
+              ffi.Pointer<ffi.Pointer<ffi.Void>>,
+              ffi.Pointer<ffi.Pointer<ffi.Void>>)>>('soloud_configureNativeAudioSink');
+  late final _configureNativeAudioSink = _configureNativeAudioSinkPtr.asFunction<
+      void Function(int, ffi.Pointer<ffi.Pointer<ffi.Void>>,
+          ffi.Pointer<ffi.Pointer<ffi.Void>>)>();
+
+  /// Disable native audio sink
+  @override
+  void disableNativeAudioSink() {
+    _disableNativeAudioSink();
+  }
+
+  late final _disableNativeAudioSinkPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>(
+          'soloud_disableNativeAudioSink');
+  late final _disableNativeAudioSink =
+      _disableNativeAudioSinkPtr.asFunction<void Function()>();
+
+  /// Check if native audio sink is active
+  @override
+  bool isNativeAudioSinkActive() {
+    return _isNativeAudioSinkActive();
+  }
+
+  late final _isNativeAudioSinkActivePtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>(
+          'soloud_isNativeAudioSinkActive');
+  late final _isNativeAudioSinkActive =
+      _isNativeAudioSinkActivePtr.asFunction<bool Function()>();
+
   @override
   PlayerErrors setDataIsEnded(SoundHash soundHash) {
     final e = _setDataIsEnded(soundHash.hash);

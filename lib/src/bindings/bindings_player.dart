@@ -217,6 +217,28 @@ abstract class FlutterSoLoud {
     Uint8List audioChunk,
   );
 
+  // ============================================================
+  // NATIVE AUDIO SINK - Direct native-to-native streaming
+  // These methods allow setting up a direct native path from
+  // recorder to player, bypassing Dart's main thread.
+  // ============================================================
+
+  /// Configure native audio sink for direct recorder-to-player streaming.
+  /// Returns callback and userData pointers (as integers) that should be
+  /// passed to flutter_recorder's setNativeAudioSink.
+  /// Returns (0, 0) if not supported (e.g., web platform).
+  @mustBeOverridden
+  ({int callbackAddress, int userDataAddress}) configureNativeAudioSinkRaw(
+      int soundHash);
+
+  /// Disable native audio sink
+  @mustBeOverridden
+  void disableNativeAudioSink();
+
+  /// Check if native audio sink is active
+  @mustBeOverridden
+  bool isNativeAudioSinkActive();
+
   /// Set the end of the data stream.
   /// [hash] the hash of the stream sound.
   /// Returns [PlayerErrors.noError] if success.

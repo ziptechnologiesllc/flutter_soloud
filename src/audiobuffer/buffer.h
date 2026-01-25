@@ -129,10 +129,61 @@ public:
         return samplesRemoved;
     }
 
-    // Function to get the current size of the buffer in bytes
+    // AUDIO-SAFE: Read data and optionally remove, using try_lock
+    // Returns samples read, or 0 if lock not available
+    // For audio callbacks that cannot block
+    size_t readAudioData_trylock(float* dest, size_t maxSamples, size_t offset, bool removeAfterRead, bool* gotLock)
+    {
+        std::unique_lock<std::mutex> lock(bufferMutex, std::try_to_lock);
+        if (!lock.owns_lock()) {
+            *gotLock = false;
+            return 0;
+        }
+        *gotLock = true;
+
+        size_t bufferSizeFloats = buffer.size() / sizeof(float);
+        if (offset >= bufferSizeFloats) {
+            return 0;
+        }
+
+        size_t available = bufferSizeFloats - offset;
+        size_t toRead = (maxSamples > available) ? available : maxSamples;
+        if (toRead == 0) return 0;
+
+        // Copy data from buffer
+        const float* src = reinterpret_cast<const float*>(buffer.data()) + offset;
+        memcpy(dest, src, toRead * sizeof(float));
+
+        // Remove if requested (for RELEASED mode)
+        if (removeAfterRead && bufferingType == BufferingType::RELEASED) {
+            size_t bytesToRemove = toRead * sizeof(float);
+            if (bytesToRemove >= buffer.size()) {
+                buffer.clear();
+            } else {
+                buffer.erase(buffer.begin(), buffer.begin() + bytesToRemove);
+            }
+        }
+
+        return toRead;
+    }
+
+    // Function to get the current size of the buffer in floats
     size_t getFloatsBufferSize()
     {
         std::lock_guard<std::mutex> lock(bufferMutex); // Lock during read
+        return buffer.size() / sizeof(float);
+    }
+
+    // AUDIO-SAFE: Try to get buffer size without blocking
+    // Returns 0 if lock not available (caller should handle gracefully)
+    size_t getFloatsBufferSize_trylock(bool* gotLock)
+    {
+        std::unique_lock<std::mutex> lock(bufferMutex, std::try_to_lock);
+        if (!lock.owns_lock()) {
+            *gotLock = false;
+            return 0;
+        }
+        *gotLock = true;
         return buffer.size() / sizeof(float);
     }
 
