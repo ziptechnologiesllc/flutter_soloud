@@ -113,6 +113,28 @@ public:
         bool loadIntoMem,
         unsigned int &hash);
 
+    /// @brief Load raw PCM float samples directly (no WAV/file header needed).
+    /// This is the most efficient way to load audio data that's already in memory
+    /// as raw samples - avoids building and parsing container formats.
+    /// @param uniqueName unique identifier for the sound (used for hash).
+    /// @param samples pointer to raw float samples (interleaved if stereo).
+    /// @param numSamples total number of samples (frames * channels).
+    /// @param sampleRate sample rate in Hz.
+    /// @param channels number of channels (1=mono, 2=stereo).
+    /// @param copy if true, SoLoud copies the data. If false, it uses the pointer directly.
+    /// @param takeOwnership if true (and copy=false), SoLoud will free the memory when done.
+    /// @param hash return the hash of the sound.
+    /// @return Returns [PlayerErrors.SO_NO_ERROR] if success.
+    PlayerErrors loadRawWave(
+        const std::string &uniqueName,
+        float *samples,
+        unsigned int numSamples,
+        float sampleRate,
+        unsigned int channels,
+        bool copy,
+        bool takeOwnership,
+        unsigned int &hash);
+
     /// @brief Set up an audio stream.
     /// @param hash return the hash of the sound.
     /// @param maxBufferSize the max buffer size in bytes.

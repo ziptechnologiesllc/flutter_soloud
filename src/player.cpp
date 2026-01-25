@@ -369,6 +369,51 @@ PlayerErrors Player::loadMem(
     return (PlayerErrors)result;
 }
 
+PlayerErrors Player::loadRawWave(
+    const std::string &uniqueName,
+    float *samples,
+    unsigned int numSamples,
+    float sampleRate,
+    unsigned int channels,
+    bool copy,
+    bool takeOwnership,
+    unsigned int &hash)
+{
+    if (!mInited)
+        return backendNotInited;
+
+    hash = 0;
+
+    unsigned int newHash = (int32_t)std::hash<std::string>{}(uniqueName) & 0x7fffffff;
+    /// check if the sound has already been loaded
+    auto const s = findByHash(newHash);
+
+    if (s != nullptr)
+    {
+        hash = newHash;
+        return fileAlreadyLoaded;
+    }
+
+    auto newSound = std::make_unique<ActiveSound>();
+    newSound.get()->completeFileName = std::string(uniqueName);
+    hash = newHash;
+    newSound.get()->soundHash = newHash;
+
+    // Create Wav and load raw PCM data directly
+    newSound.get()->sound = std::make_unique<SoLoud::Wav>();
+    newSound.get()->soundType = TYPE_WAV;
+    SoLoud::result result = static_cast<SoLoud::Wav *>(newSound.get()->sound.get())->loadRawWave(
+        samples, numSamples, sampleRate, channels, copy, takeOwnership);
+
+    if (result == SoLoud::SO_NO_ERROR)
+    {
+        newSound.get()->filters = std::make_unique<Filters>(&soloud, newSound.get());
+        sounds.push_back(std::move(newSound));
+    }
+
+    return (PlayerErrors)result;
+}
+
 PlayerErrors Player::setBufferStream(
     unsigned int &hash,
     unsigned long maxBufferSize,

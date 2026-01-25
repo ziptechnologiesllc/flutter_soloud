@@ -239,6 +239,11 @@ abstract class FlutterSoLoud {
   @mustBeOverridden
   bool isNativeAudioSinkActive();
 
+  /// Get the looper bridge function pointer for direct native-to-native playback.
+  /// Returns the address of the looper_loadAndPlayLoop function.
+  @mustBeOverridden
+  int getLooperBridgeFunction();
+
   /// Set the end of the data stream.
   /// [hash] the hash of the stream sound.
   /// Returns [PlayerErrors.noError] if success.

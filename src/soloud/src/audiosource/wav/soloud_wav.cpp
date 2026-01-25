@@ -408,18 +408,49 @@ namespace SoLoud
 			return INVALID_PARAMETER;
 		stop();
 		delete[] mData;
-		if (aCopy == true || aTakeOwndership == false)
-		{
-			mData = new float[aLength];
-			memcpy(mData, aMem, sizeof(float) * aLength);
-		}
-		else
-		{
-			mData = aMem;
-		}
+
 		mSampleCount = aLength / aChannels;
 		mChannels = aChannels;
 		mBaseSamplerate = aSamplerate;
+
+		// SoLoud uses PLANAR format internally (all samples for channel 0, then all for channel 1, etc.)
+		// Input data is INTERLEAVED (L0 R0 L1 R1 L2 R2...)
+		// We need to deinterleave: L0 L1 L2... R0 R1 R2...
+
+		if (aChannels == 1)
+		{
+			// Mono - no deinterleaving needed
+			if (aCopy == true || aTakeOwndership == false)
+			{
+				mData = new float[aLength];
+				memcpy(mData, aMem, sizeof(float) * aLength);
+			}
+			else
+			{
+				mData = aMem;
+			}
+		}
+		else
+		{
+			// Multi-channel - must deinterleave (always allocate new buffer)
+			mData = new float[aLength];
+			for (unsigned int frame = 0; frame < mSampleCount; frame++)
+			{
+				for (unsigned int ch = 0; ch < aChannels; ch++)
+				{
+					// Source: interleaved at frame * channels + ch
+					// Dest: planar at ch * sampleCount + frame
+					mData[ch * mSampleCount + frame] = aMem[frame * aChannels + ch];
+				}
+			}
+
+			// If we took ownership but had to copy for deinterleaving, free the original
+			if (aTakeOwndership == true)
+			{
+				delete[] aMem;
+			}
+		}
+
 		return SO_NO_ERROR;
 	}
 };

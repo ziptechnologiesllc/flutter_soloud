@@ -5,6 +5,7 @@
 #include "synth/basic_wave.h"
 #include "waveform/waveform.h"
 #include "aec_bridge.h"
+#include "looper_bridge.h"
 
 #ifndef COMMON_H
 #include "common.h"
@@ -650,6 +651,13 @@ extern "C"
     FFI_PLUGIN_EXPORT bool soloud_isNativeAudioSinkActive()
     {
         return g_nativeSinkActive.load(std::memory_order_acquire);
+    }
+
+    /// Get the looper bridge function pointer for direct native-to-native playback
+    /// Returns the address of looper_loadAndPlayRaw function (raw PCM, no WAV overhead)
+    FFI_PLUGIN_EXPORT void* soloud_getLooperBridgeFunction()
+    {
+        return (void*)looper_loadAndPlayRaw;
     }
 
     // Set the end of the data stream.

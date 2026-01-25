@@ -673,6 +673,18 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
   late final _isNativeAudioSinkActive =
       _isNativeAudioSinkActivePtr.asFunction<bool Function()>();
 
+  /// Get the looper bridge function pointer for direct native-to-native playback
+  @override
+  int getLooperBridgeFunction() {
+    return _getLooperBridgeFunction().address;
+  }
+
+  late final _getLooperBridgeFunctionPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Void> Function()>>(
+          'soloud_getLooperBridgeFunction');
+  late final _getLooperBridgeFunction =
+      _getLooperBridgeFunctionPtr.asFunction<ffi.Pointer<ffi.Void> Function()>();
+
   @override
   PlayerErrors setDataIsEnded(SoundHash soundHash) {
     final e = _setDataIsEnded(soundHash.hash);

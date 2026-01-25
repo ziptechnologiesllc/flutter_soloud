@@ -359,6 +359,11 @@ class FlutterSoLoudWeb extends FlutterSoLoud {
   }
 
   @override
+  int getLooperBridgeFunction() {
+    return 0; // Not available on web
+  }
+
+  @override
   PlayerErrors setDataIsEnded(SoundHash soundHash) {
     final result = wasmSetDataIsEnded(soundHash.hash);
     return PlayerErrors.values[result];
