@@ -4,7 +4,6 @@ import 'package:meta/meta.dart';
 /// New values must be enumerated at the bottom
 ///
 /// WARNING: Keep these in sync with `src/enums.h`.
-@internal
 enum PlayerErrors {
   /// No error
   noError(0),

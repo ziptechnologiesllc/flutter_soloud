@@ -244,6 +244,17 @@ abstract class FlutterSoLoud {
   @mustBeOverridden
   int getLooperBridgeFunction();
 
+  /// Set the callback for when looper bridge starts playback.
+  /// Native will call this with (soundHash, handle, durationSeconds) when a loop starts.
+  @mustBeOverridden
+  void setLooperPlaybackStartedCallback(
+    void Function(int soundHash, int handle, double durationSeconds) callback,
+  );
+
+  /// Clear the looper playback started callback.
+  @mustBeOverridden
+  void clearLooperPlaybackStartedCallback();
+
   /// Set the end of the data stream.
   /// [hash] the hash of the stream sound.
   /// Returns [PlayerErrors.noError] if success.
@@ -1034,6 +1045,38 @@ abstract class FlutterSoLoud {
   /// Clear the AEC output callback.
   @mustBeOverridden
   void clearAECOutputCallback();
+
+  // ///////////////////////////////////////
+  // Async Waveform Extraction
+  // ///////////////////////////////////////
+
+  /// Set callback for async waveform extraction.
+  /// The callback receives (soundHash, error) when extraction completes.
+  @mustBeOverridden
+  void setWaveformExtractedCallback(
+    void Function(int soundHash, int error) callback,
+  );
+
+  /// Clear the waveform extraction callback.
+  @mustBeOverridden
+  void clearWaveformExtractedCallback();
+
+  /// Extract waveform asynchronously on a background thread.
+  /// Zero-copy: reads directly from native buffer, writes to pre-allocated buffer.
+  /// The callback set via [setWaveformExtractedCallback] will be invoked when done.
+  @mustBeOverridden
+  void extractWaveformAsync(
+    int soundHash,
+    int numSamples, {
+    double startTime = 0,
+    double endTime = -1,
+    bool average = true,
+  });
+
+  /// Get the extracted waveform samples after callback indicates completion.
+  /// Returns null if no pending extraction or hash mismatch.
+  @mustBeOverridden
+  Float32List? getExtractedWaveform(int soundHash);
 }
 
 /// Used for easier conversion from [double] to [Duration].

@@ -55,6 +55,40 @@ typedef DartdartStateChangedCallbackTFunction = void Function(
 
 typedef OnMetadataCallbackTFunction = void Function(NativeAudioMetadata);
 
+/// Native callback type for looper playback started
+/// Parameters: soundHash, handle, durationSeconds
+typedef LooperPlaybackStartedCallbackNative = ffi.Void Function(
+  ffi.UnsignedInt soundHash,
+  ffi.UnsignedInt handle,
+  ffi.Double durationSeconds,
+);
+
+/// Dart callback type for looper playback started
+typedef LooperPlaybackStartedCallbackDart = void Function(
+  int soundHash,
+  int handle,
+  double durationSeconds,
+);
+
+/// Static storage for the Dart callback
+void Function(int, int, double)? _looperPlaybackStartedCallback;
+
+/// Native callback that forwards to Dart
+void _nativeLooperPlaybackStartedCallback(
+  int soundHash,
+  int handle,
+  double durationSeconds,
+) {
+  _looperPlaybackStartedCallback?.call(soundHash, handle, durationSeconds);
+}
+
+/// Native callback type for waveform extraction completed
+/// Parameters: soundHash, error (0 = success)
+typedef WaveformExtractedCallbackNative = ffi.Void Function(
+  ffi.UnsignedInt soundHash,
+  ffi.Int error,
+);
+
 /// FFI bindings to SoLoud
 @internal
 class FlutterSoLoudFfi extends FlutterSoLoud {
@@ -684,6 +718,54 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
           'soloud_getLooperBridgeFunction');
   late final _getLooperBridgeFunction =
       _getLooperBridgeFunctionPtr.asFunction<ffi.Pointer<ffi.Void> Function()>();
+
+  /// NativeCallable for the looper playback started callback
+  static ffi.NativeCallable<LooperPlaybackStartedCallbackNative>?
+      _looperCallableInstance;
+
+  @override
+  void setLooperPlaybackStartedCallback(
+    void Function(int soundHash, int handle, double durationSeconds) callback,
+  ) {
+    // Store the Dart callback
+    _looperPlaybackStartedCallback = callback;
+
+    // Create native callable if not already created
+    _looperCallableInstance ??= ffi.NativeCallable<
+        LooperPlaybackStartedCallbackNative>.listener(
+      _nativeLooperPlaybackStartedCallback,
+    );
+
+    // Pass to native
+    _setLooperPlaybackStartedCallback(_looperCallableInstance!.nativeFunction);
+    _log.fine('Looper playback started callback set');
+  }
+
+  @override
+  void clearLooperPlaybackStartedCallback() {
+    _clearLooperPlaybackStartedCallback();
+    _looperPlaybackStartedCallback = null;
+    // Don't close the NativeCallable - it may be reused
+    _log.fine('Looper playback started callback cleared');
+  }
+
+  late final _setLooperPlaybackStartedCallbackPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.Pointer<
+                  ffi.NativeFunction<LooperPlaybackStartedCallbackNative>>)>>(
+      'looper_setPlaybackStartedCallback');
+  late final _setLooperPlaybackStartedCallback =
+      _setLooperPlaybackStartedCallbackPtr.asFunction<
+          void Function(
+              ffi.Pointer<
+                  ffi.NativeFunction<LooperPlaybackStartedCallbackNative>>)>();
+
+  late final _clearLooperPlaybackStartedCallbackPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>(
+          'looper_clearPlaybackStartedCallback');
+  late final _clearLooperPlaybackStartedCallback =
+      _clearLooperPlaybackStartedCallbackPtr.asFunction<void Function()>();
 
   @override
   PlayerErrors setDataIsEnded(SoundHash soundHash) {
@@ -2239,6 +2321,125 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
     final samples =
         Float32List.fromList(pSamples.asTypedList(numSamplesNeeded));
     calloc.free(pSamples);
+    return samples;
+  }
+
+  // ============== Async Waveform Extraction ==============
+
+  /// Dart callback storage
+  static void Function(int soundHash, int error)? _waveformExtractedCallback;
+
+  /// Pending waveform buffer - stored here so it doesn't get GC'd during async extraction
+  static ffi.Pointer<ffi.Float>? _pendingWaveformBuffer;
+  static int _pendingWaveformNumSamples = 0;
+  static int _pendingWaveformHash = 0;
+
+  /// Native callback that forwards to Dart
+  static void _nativeWaveformExtractedCallback(int soundHash, int error) {
+    _waveformExtractedCallback?.call(soundHash, error);
+  }
+
+  /// NativeCallable for the waveform extracted callback
+  static ffi.NativeCallable<WaveformExtractedCallbackNative>?
+      _waveformCallableInstance;
+
+  /// Set callback for async waveform extraction
+  @override
+  void setWaveformExtractedCallback(
+    void Function(int soundHash, int error) callback,
+  ) {
+    _waveformExtractedCallback = callback;
+
+    _waveformCallableInstance ??= ffi.NativeCallable<
+        WaveformExtractedCallbackNative>.listener(
+      _nativeWaveformExtractedCallback,
+    );
+
+    _setWaveformExtractedCallback(_waveformCallableInstance!.nativeFunction);
+  }
+
+  /// Clear callback
+  @override
+  void clearWaveformExtractedCallback() {
+    _clearWaveformExtractedCallback();
+    _waveformExtractedCallback = null;
+  }
+
+  late final _setWaveformExtractedCallbackPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.Pointer<
+                  ffi.NativeFunction<WaveformExtractedCallbackNative>>)>>(
+      'setWaveformExtractedCallback');
+  late final _setWaveformExtractedCallback =
+      _setWaveformExtractedCallbackPtr.asFunction<
+          void Function(
+              ffi.Pointer<
+                  ffi.NativeFunction<WaveformExtractedCallbackNative>>)>();
+
+  late final _clearWaveformExtractedCallbackPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>(
+          'clearWaveformExtractedCallback');
+  late final _clearWaveformExtractedCallback =
+      _clearWaveformExtractedCallbackPtr.asFunction<void Function()>();
+
+  late final _extractWaveformAsyncPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.UnsignedInt,
+              ffi.Pointer<ffi.Float>,
+              ffi.UnsignedInt,
+              ffi.Float,
+              ffi.Float,
+              ffi.Bool)>>('extractWaveformAsync');
+  late final _extractWaveformAsync = _extractWaveformAsyncPtr.asFunction<
+      void Function(int, ffi.Pointer<ffi.Float>, int, double, double, bool)>();
+
+  /// Extract waveform asynchronously on background thread
+  /// The callback will be invoked with (soundHash, error) when done
+  /// Use [getExtractedWaveform] to retrieve the samples after callback
+  @override
+  void extractWaveformAsync(
+    int soundHash,
+    int numSamples, {
+    double startTime = 0,
+    double endTime = -1,
+    bool average = true,
+  }) {
+    final pSamples = calloc<ffi.Float>(numSamples);
+
+    // Store for retrieval after callback
+    _pendingWaveformBuffer = pSamples;
+    _pendingWaveformNumSamples = numSamples;
+    _pendingWaveformHash = soundHash;
+
+    _extractWaveformAsync(
+      soundHash,
+      pSamples,
+      numSamples,
+      startTime,
+      endTime,
+      average,
+    );
+  }
+
+  /// Get the completed waveform samples and free the buffer
+  /// Call this in the callback after extraction completes
+  @override
+  Float32List? getExtractedWaveform(int soundHash) {
+    if (_pendingWaveformBuffer == null || _pendingWaveformHash != soundHash) {
+      return null;
+    }
+
+    final samples = Float32List.fromList(
+      _pendingWaveformBuffer!.asTypedList(_pendingWaveformNumSamples),
+    );
+
+    calloc.free(_pendingWaveformBuffer!);
+    _pendingWaveformBuffer = null;
+    _pendingWaveformNumSamples = 0;
+    _pendingWaveformHash = 0;
+
     return samples;
   }
 }

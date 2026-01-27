@@ -1,3 +1,4 @@
+#include "waveform_extractor.h"
 #include "common.h"
 #include "player.h"
 #include "soloud.h"
@@ -5,12 +6,24 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <thread>
+#include <atomic>
 
 // External reference to the global player instance from bindings.cpp
-// Included via common.h or player.h usually, but we keep it explicit if needed.
 extern std::unique_ptr<Player> player;
 
+// Callback for async waveform extraction
+static WaveformExtractedCallback g_waveformCallback = nullptr;
+
 extern "C" {
+
+FFI_PLUGIN_EXPORT void setWaveformExtractedCallback(WaveformExtractedCallback callback) {
+    g_waveformCallback = callback;
+}
+
+FFI_PLUGIN_EXPORT void clearWaveformExtractedCallback() {
+    g_waveformCallback = nullptr;
+}
 
 /// Extract waveform samples from an already-loaded audio source.
 int extractSamplesFromLoadedSource(unsigned int hash, float startTime,
@@ -106,6 +119,28 @@ int extractSamplesFromLoadedSource(unsigned int hash, float startTime,
   }
 
   return 0; // Success
+}
+
+FFI_PLUGIN_EXPORT void extractWaveformAsync(
+    unsigned int hash,
+    float* outBuffer,
+    unsigned int numSamples,
+    float startTime,
+    float endTime,
+    bool average
+) {
+    // Capture parameters for the thread
+    std::thread([=]() {
+        // Run extraction on background thread
+        int result = extractSamplesFromLoadedSource(
+            hash, startTime, endTime, numSamples, average, outBuffer
+        );
+
+        // Notify Dart via callback (if set)
+        if (g_waveformCallback) {
+            g_waveformCallback(hash, result);
+        }
+    }).detach();
 }
 
 } // extern "C"
