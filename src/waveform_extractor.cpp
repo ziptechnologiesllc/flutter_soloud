@@ -1,3 +1,10 @@
+// Prevent Windows min/max macros from conflicting with std::min/std::max
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#endif
+
 #include "waveform_extractor.h"
 #include "common.h"
 #include "player.h"
