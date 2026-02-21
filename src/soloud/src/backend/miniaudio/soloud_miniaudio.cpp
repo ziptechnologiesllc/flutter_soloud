@@ -391,7 +391,11 @@ static bool lookupSlaveBridgeSymbols() {
   // RTLD_NOLOAD ensures we don't load a second copy - we just get a handle
   // to the already-loaded library.
   const char *libNames[] = {
-      "libflutter_recorder.so",           // Standard name
+#if defined(__APPLE__)
+      "@rpath/flutter_recorder.framework/flutter_recorder",  // iOS/macOS framework
+      "flutter_recorder.framework/flutter_recorder",         // Relative framework
+#endif
+      "libflutter_recorder.so",           // Linux/Android standard name
       "./lib/libflutter_recorder.so",     // Relative to executable
       nullptr
   };
