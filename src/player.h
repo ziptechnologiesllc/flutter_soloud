@@ -283,7 +283,8 @@ public:
 
     /// @brief Remove the unique [handle] form the list of internal sounds.
     /// @param handle handle of the sound.
-    void removeHandle(unsigned int handle);
+    /// @return true if the handle was found and removed.
+    bool removeHandle(unsigned int handle);
 
     /// @brief Stop all handles of the already loaded sound identified by [soundHash] and clear it.
     /// @param soundHash hash of the sound.
@@ -650,6 +651,10 @@ public:
     unsigned int mSampleRate;
 
     unsigned int mChannels;
+
+    /// mutex guarding all access to the `sounds` vector.
+    /// Must be held for any read/write/iteration of `sounds`.
+    std::mutex sounds_mutex;
 
 private:
     ma_device_info *pPlaybackInfos;

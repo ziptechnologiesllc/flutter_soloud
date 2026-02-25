@@ -110,13 +110,12 @@ extern "C"
     /// and comes from the audio thread (so on the web, from a different web worker).
     FFI_PLUGIN_EXPORT void voiceEndedCallback(unsigned int *handle)
     {
-        bool isHandleFound;
+        bool isHandleFound = false;
         if (player != nullptr)
         {
-            isHandleFound = player->findByHandle(*handle) != nullptr;
-            if (isHandleFound)
-                player->removeHandle(*handle);
-            else
+            // removeHandle atomically finds and removes the handle under the sounds_mutex.
+            isHandleFound = player->removeHandle(*handle);
+            if (!isHandleFound)
                 // If the handle is not found, for sure it is already
                 // removed by a previous call to `voiceEndedCallback`.
                 // For example triggering a `stop` in a `Future` after the sound is ended or
@@ -1518,6 +1517,7 @@ extern "C"
             *index = player.get()->mFilters.isFilterActive(filterType);
         else
         {
+            std::lock_guard<std::mutex> lock(player.get()->sounds_mutex);
             auto const s = player.get()->findByHash(soundHash);
             if (s == nullptr)
                 return soundHashNotFound;
@@ -1562,6 +1562,7 @@ extern "C"
         if (soundHash == 0)
             return player.get()->mFilters.addFilter(filterType);
 
+        std::lock_guard<std::mutex> lock(player.get()->sounds_mutex);
         auto const s = player.get()->findByHash(soundHash);
         if (s == nullptr)
             return soundHashNotFound;
@@ -1585,6 +1586,7 @@ extern "C"
         }
         else
         {
+            std::lock_guard<std::mutex> lock(player.get()->sounds_mutex);
             auto const s = player.get()->findByHash(soundHash);
             if (s == nullptr)
                 return soundHashNotFound;
@@ -1611,6 +1613,7 @@ extern "C"
             player.get()->mFilters.setFilterParams(handle, filterType, attributeId, value);
         else
         {
+            std::lock_guard<std::mutex> lock(player.get()->sounds_mutex);
             auto const &s = player.get()->findByHandle(handle);
             if (s == nullptr)
             {
@@ -1647,6 +1650,7 @@ extern "C"
         }
         else
         {
+            std::lock_guard<std::mutex> lock(player.get()->sounds_mutex);
             auto const &s = player.get()->findByHandle(handle);
             if (s == nullptr)
                 return soundHandleNotFound;
@@ -1684,6 +1688,7 @@ extern "C"
             player.get()->mFilters.fadeFilterParameter(handle, filterType, attributeId, to, time);
         else
         {
+            std::lock_guard<std::mutex> lock(player.get()->sounds_mutex);
             auto const &s = player.get()->findByHandle(handle);
             if (s == nullptr)
             {
@@ -1720,6 +1725,7 @@ extern "C"
             player.get()->mFilters.oscillateFilterParameter(handle, filterType, attributeId, from, to, time);
         else
         {
+            std::lock_guard<std::mutex> lock(player.get()->sounds_mutex);
             auto const &s = player.get()->findByHandle(handle);
             if (s == nullptr)
             {
