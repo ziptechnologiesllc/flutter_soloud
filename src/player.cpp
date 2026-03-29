@@ -3,10 +3,18 @@
 #include "filters/filters.h"
 #include "soloud.h"
 #include "soloud/include/soloud.h"
+#include "soloud_internal.h"
 #include "soloud_wav.h"
 // #include "soloud_thread.h"
 #include "soloud_wavstream.h"
 #include "synth/basic_wave.h"
+
+// Forward declaration for slave-mode init (defined in soloud_miniaudio.cpp)
+namespace SoLoud {
+    SoLoud::result miniaudio_init_slave(SoLoud::Soloud *aSoloud, unsigned int aFlags,
+                                        unsigned int aSamplerate, unsigned int aBuffer,
+                                        unsigned int aChannels);
+}
 
 #include <algorithm>
 #include <cstdarg>
@@ -98,6 +106,36 @@ PlayerErrors Player::init(unsigned int sampleRate, unsigned int bufferSize, unsi
         result = soloud.init(
             SoLoud::Soloud::CLIP_ROUNDOFF,
             SoLoud::Soloud::MINIAUDIO, sampleRate, bufferSize, channels, playbackInfos_id);
+    } catch (...) {
+        return backendNotInited;
+    }
+
+    if (result == SoLoud::SO_NO_ERROR)
+    {
+        mInited = true;
+        mSampleRate = sampleRate;
+        mBufferSize = bufferSize;
+        mChannels = channels;
+    }
+    else
+        result = backendNotInited;
+    return (PlayerErrors)result;
+}
+
+PlayerErrors Player::initSlave(unsigned int sampleRate, unsigned int bufferSize,
+                               unsigned int channels)
+{
+    if (mInited)
+        return playerAlreadyInited;
+
+    // Initialize SoLoud in slave mode - no audio device created.
+    // The Capture plugin's duplex device will drive audio output.
+    SoLoud::result result;
+    try {
+        result = SoLoud::miniaudio_init_slave(
+            &soloud,
+            SoLoud::Soloud::CLIP_ROUNDOFF,
+            sampleRate, bufferSize, channels);
     } catch (...) {
         return backendNotInited;
     }
@@ -393,6 +431,56 @@ PlayerErrors Player::loadMem(
     // even though we've now loaded a new instance with a unique hash.
     if (s != nullptr && result == SoLoud::SO_NO_ERROR) {
         return fileAlreadyLoaded;
+    }
+
+    return (PlayerErrors)result;
+}
+
+PlayerErrors Player::loadRawWave(
+    const std::string &uniqueName,
+    float *samples,
+    unsigned int numSamples,
+    float sampleRate,
+    unsigned int channels,
+    bool copy,
+    bool takeOwnership,
+    unsigned int &hash)
+{
+    if (!mInited)
+        return backendNotInited;
+
+    hash = 0;
+
+    unsigned int newHash = (int32_t)std::hash<std::string>{}(uniqueName) & 0x7fffffff;
+
+    {
+        std::lock_guard<std::recursive_mutex> lock(sounds_mutex);
+        /// check if the sound has already been loaded
+        auto const s = findByHash(newHash);
+
+        if (s != nullptr)
+        {
+            hash = newHash;
+            return fileAlreadyLoaded;
+        }
+    }
+
+    auto newSound = std::make_unique<ActiveSound>();
+    newSound.get()->completeFileName = std::string(uniqueName);
+    hash = newHash;
+    newSound.get()->soundHash = newHash;
+
+    // Create Wav and load raw PCM data directly
+    newSound.get()->sound = std::make_unique<SoLoud::Wav>();
+    newSound.get()->soundType = TYPE_WAV;
+    SoLoud::result result = static_cast<SoLoud::Wav *>(newSound.get()->sound.get())->loadRawWave(
+        samples, numSamples, sampleRate, channels, copy, takeOwnership);
+
+    if (result == SoLoud::SO_NO_ERROR)
+    {
+        newSound.get()->filters = std::make_unique<Filters>(&soloud, newSound.get(), nullptr);
+        std::lock_guard<std::recursive_mutex> lock(sounds_mutex);
+        sounds.push_back(std::move(newSound));
     }
 
     return (PlayerErrors)result;
@@ -747,11 +835,11 @@ void Player::stop(unsigned int handle)
     }
 }
 
-void Player::removeHandle(unsigned int handle)
+bool Player::removeHandle(unsigned int handle)
 {
     std::lock_guard<std::recursive_mutex> lock(sounds_mutex);
     if (sounds.empty()) {
-        return;
+        return false;
     }
 
     bool found = false;
@@ -770,6 +858,7 @@ void Player::removeHandle(unsigned int handle)
         }
         ++i;
     }
+    return found;
 }
 
 void Player::disposeSound(unsigned int soundHash)

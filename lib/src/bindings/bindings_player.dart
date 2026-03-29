@@ -88,6 +88,24 @@ abstract class FlutterSoLoud {
     Channels channels,
   );
 
+  /// Initialize the player in slave mode without creating an audio device.
+  /// Audio must be fed from an external source (typically from the Capture
+  /// plugin's duplex device). This ensures perfect clock synchronization for
+  /// AEC (Acoustic Echo Cancellation) on Linux where separate audio devices
+  /// have independent clocks that drift apart.
+  ///
+  /// [sampleRate] sample rate to match the capture device.
+  /// [bufferSize] the audio buffer size.
+  /// [channels] mono, stereo, quad, 5.1, 7.1.
+  ///
+  /// Returns [PlayerErrors.noError] if success.
+  @mustBeOverridden
+  PlayerErrors initEngineSlave(
+    int sampleRate,
+    int bufferSize,
+    Channels channels,
+  );
+
   /// Change the playback device.
   ///
   /// [deviceId] the device ID. -1 for default OS output device.
@@ -198,6 +216,45 @@ abstract class FlutterSoLoud {
     int hash,
     Uint8List audioChunk,
   );
+
+  // ============================================================
+  // NATIVE AUDIO SINK - Direct native-to-native streaming
+  // These methods allow setting up a direct native path from
+  // recorder to player, bypassing Dart's main thread.
+  // ============================================================
+
+  /// Configure native audio sink for direct recorder-to-player streaming.
+  /// Returns callback and userData pointers (as integers) that should be
+  /// passed to flutter_recorder's setNativeAudioSink.
+  /// Returns (0, 0) if not supported (e.g., web platform).
+  @mustBeOverridden
+  ({int callbackAddress, int userDataAddress}) configureNativeAudioSinkRaw(
+      int soundHash);
+
+  /// Disable native audio sink.
+  @mustBeOverridden
+  void disableNativeAudioSink();
+
+  /// Check if native audio sink is active.
+  @mustBeOverridden
+  bool isNativeAudioSinkActive();
+
+  /// Get the looper bridge function pointer for direct native-to-native
+  /// playback. Returns the address of the looper_loadAndPlayLoop function.
+  @mustBeOverridden
+  int getLooperBridgeFunction();
+
+  /// Set the callback for when looper bridge starts playback.
+  /// Native will call this with (soundHash, handle, durationSeconds) when
+  /// a loop starts.
+  @mustBeOverridden
+  void setLooperPlaybackStartedCallback(
+    void Function(int soundHash, int handle, double durationSeconds) callback,
+  );
+
+  /// Clear the looper playback started callback.
+  @mustBeOverridden
+  void clearLooperPlaybackStartedCallback();
 
   /// Set the end of the data stream.
   /// [hash] the hash of the stream sound.
@@ -1084,6 +1141,55 @@ abstract class FlutterSoLoud {
   /// Returns the active voice count, or 0 if the bus is not found.
   @mustBeOverridden
   int busGetActiveVoiceCount(int busId);
+
+  // ///////////////////////////////////////
+  // AEC (Adaptive Echo Cancellation)
+  // ///////////////////////////////////////
+
+  /// Set the AEC output callback to receive playback audio for echo
+  /// cancellation.
+  /// [callbackPtr] is the function pointer from flutter_recorder's
+  /// aecGetOutputCallback().
+  @mustBeOverridden
+  void setAECOutputCallback(int callbackPtr);
+
+  /// Clear the AEC output callback.
+  @mustBeOverridden
+  void clearAECOutputCallback();
+
+  // ///////////////////////////////////////
+  // Async Waveform Extraction
+  // ///////////////////////////////////////
+
+  /// Set callback for async waveform extraction.
+  /// The callback receives (soundHash, error) when extraction completes.
+  @mustBeOverridden
+  void setWaveformExtractedCallback(
+    void Function(int soundHash, int error) callback,
+  );
+
+  /// Clear the waveform extraction callback.
+  @mustBeOverridden
+  void clearWaveformExtractedCallback();
+
+  /// Extract waveform asynchronously on a background thread.
+  /// Zero-copy: reads directly from native buffer, writes to pre-allocated
+  /// buffer.
+  /// The callback set via [setWaveformExtractedCallback] will be invoked
+  /// when done.
+  @mustBeOverridden
+  void extractWaveformAsync(
+    int soundHash,
+    int numSamples, {
+    double startTime = 0,
+    double endTime = -1,
+    bool average = true,
+  });
+
+  /// Get the extracted waveform samples after callback indicates completion.
+  /// Returns null if no pending extraction or hash mismatch.
+  @mustBeOverridden
+  Float32List? getExtractedWaveform(int soundHash);
 }
 
 /// Used for easier conversion from [double] to [Duration].

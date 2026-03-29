@@ -168,7 +168,18 @@ interface class SoLoud {
   ///   // ...
   /// }
   /// ```
-  static final SoLoud instance = SoLoud._();
+  static SoLoud? _mockImplementation;
+
+  /// Set a mock implementation for testing.
+  @visibleForTesting
+  static void setMockImplementation(SoLoud mock) {
+    _mockImplementation = mock;
+  }
+
+  static final SoLoud _internalInstance = SoLoud._();
+
+  /// The singleton instance of [SoLoud].
+  static SoLoud get instance => _mockImplementation ?? _internalInstance;
 
   /// A helper for loading files that aren't on disk.
   final SoLoudLoader _loader = SoLoudLoader();
@@ -320,6 +331,92 @@ interface class SoLoud {
       await _loader.initialize();
     } else {
       _log.severe('initialize() failed with error: $error');
+      throw SoLoudCppException.fromPlayerError(error);
+    }
+  }
+
+  /// Initializes the audio engine in slave mode without creating an audio
+  /// device. Audio must be fed from an external source
+  /// (typically from the Capture plugin's duplex device). This ensures perfect
+  /// clock synchronization for AEC (Acoustic Echo Cancellation) on Linux where
+  /// separate audio devices have independent clocks that drift apart.
+  ///
+  /// **When to use this:**
+  /// - On Linux when using AEC with the flutter_recorder plugin
+  /// - When you need perfect synchronization between playback and capture
+  ///
+  /// **Platform notes:**
+  /// - Linux: Required for AEC to work reliably (prevents clock drift)
+  /// - macOS/iOS: Not needed (CoreAudio provides clock synchronization)
+  /// - Windows: Not needed (WASAPI shared mode handles synchronization)
+  /// - Web: Not supported (browser handles audio device synchronization)
+  ///
+  /// [sampleRate] should match the capture device's sample rate.
+  /// [bufferSize] the audio buffer size.
+  /// [channels] mono, stereo, quad, 5.1, 7.1.
+  Future<void> initSlave({
+    bool automaticCleanup = false,
+    int sampleRate = 48000,
+    int bufferSize = 128,
+    Channels channels = Channels.stereo,
+  }) async {
+    _log.finest('initSlave() called');
+
+    // Initialize native callbacks
+    await _initializeNativeCallbacks();
+
+    // Making extra sure no state is dangling after a hot-restart.
+    assert(
+        voiceEndedCompleters.isEmpty,
+        'voiceEndedCompleters is not empty. '
+        'Probably the developer forgot to call deinit().');
+    assert(
+        loadedFileCompleters.isEmpty,
+        'loadedFileCompleters is not empty. '
+        'Probably the developer forgot to call deinit().');
+    assert(
+        _activeSounds.isEmpty,
+        '_activeSounds is not empty. '
+        'Probably the developer forgot to call deinit().');
+    voiceEndedCompleters.clear();
+    loadedFileCompleters.clear();
+    _activeSounds.clear();
+
+    // if `!isInitialized` but the engine is initialized in native, therefore
+    // the developer may have carried out a hot reload which does not imply
+    // the release of the native player.
+    // Just deinit the engine to be re-inited later.
+    if (isInitialized) {
+      _log.warning(
+        'initSlave() called when the native player is already '
+        'initialized. This is expected after a hot restart but not '
+        "otherwise. If you see this in production logs, there's probably "
+        'a bug in your code. You may have neglected to deinit() SoLoud '
+        'during the current lifetime of the app.',
+      );
+      deinit();
+
+      /// Re-initialize native callbacks because the above call to `deinit()`
+      /// has released them.
+      await _initializeNativeCallbacks();
+    }
+
+    final error = _controller.soLoudFFI.initEngineSlave(
+      sampleRate,
+      bufferSize,
+      channels,
+    );
+    _logPlayerError(error, from: 'initSlave() result');
+    if (error == PlayerErrors.noError) {
+      /// get the visualization flag from the player on C side.
+      _isVisualizationEnabled = _controller.soLoudFFI.getVisualizationEnabled();
+
+      // Initialize [SoLoudLoader]
+      _loader.automaticCleanup = automaticCleanup;
+
+      await _loader.initialize();
+    } else {
+      _log.severe('initSlave() failed with error: $error');
       throw SoLoudCppException.fromPlayerError(error);
     }
   }
@@ -3010,5 +3107,27 @@ interface class SoLoud {
     }
     strBuf.write(playerError.toString());
     _log.log(logLevel, strBuf.toString());
+  }
+
+  // ///////////////////////////////////////
+  // AEC (Adaptive Echo Cancellation)
+  // ///////////////////////////////////////
+
+  /// Set the AEC output callback to receive playback audio for echo
+  /// cancellation.
+  /// [callbackPtr] is the function pointer from flutter_recorder's
+  /// aecGetOutputCallback().
+  ///
+  /// This connects SoLoud's audio output to the AEC reference buffer in
+  /// flutter_recorder, enabling echo cancellation of played loops from
+  /// the microphone input.
+  void setAECOutputCallback(int callbackPtr) {
+    _controller.soLoudFFI.setAECOutputCallback(callbackPtr);
+  }
+
+  /// Clear the AEC output callback.
+  /// Call this when shutting down or when AEC is no longer needed.
+  void clearAECOutputCallback() {
+    _controller.soLoudFFI.clearAECOutputCallback();
   }
 }

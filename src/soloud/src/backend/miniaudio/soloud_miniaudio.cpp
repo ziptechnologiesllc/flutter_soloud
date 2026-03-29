@@ -22,13 +22,33 @@ misrepresented as being the original software.
 distribution.
 */
 #include <stdlib.h>
+#include <string.h>
+#include <vector>
 
 #include "soloud.h"
 #include "soloud_internal.h"
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#define SOLOUD_TAG "FlutterSoLoud"
+#endif
+
+#include "../../../../aec_bridge.h"
+
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
+#include <dlfcn.h>
 #endif
+
+// Slave bridge callback type (must match flutter_recorder's soloud_slave_bridge.h)
+typedef void (*SoloudSlaveMixCallback)(float *output, unsigned int frameCount,
+                                       unsigned int channels);
+typedef void (*SoloudRegisterSlaveCallbackFn)(SoloudSlaveMixCallback callback);
+typedef void (*SoloudUnregisterSlaveCallbackFn)(void);
+
+// Cached function pointers for slave bridge (looked up once at init)
+static SoloudRegisterSlaveCallbackFn g_registerSlaveCallback = nullptr;
+static SoloudUnregisterSlaveCallbackFn g_unregisterSlaveCallback = nullptr;
 
 #if !defined(WITH_MINIAUDIO)
 
@@ -82,6 +102,12 @@ namespace SoLoud
     SoLoud::Soloud *soloud;
     ma_context context;
     volatile bool gDeviceStopped = true;  // Track device stopped state for proper cleanup
+
+    // Slave mode: When true, SoLoud doesn't own an audio device.
+    // Instead, Capture's duplex device calls our mix function directly.
+    static bool gSlaveMode = false;
+    static unsigned int gSlaveChannels = 2;
+    static unsigned int gSlaveSamplerate = 48000;
 
     // Forward declarations for functions used in on_notification
     result soloud_miniaudio_pause(SoLoud::Soloud *aSoloud);
@@ -180,10 +206,25 @@ namespace SoLoud
         first_call = false;
         SoLoud::Soloud *soloud = (SoLoud::Soloud *)pDevice->pUserData;
         soloud->mix((float *)pOutput, frameCount);
+
+        // Send output audio to AEC reference buffer (if callback is set)
+        if (g_aecOutputCallback != nullptr) {
+            g_aecOutputCallback((const float *)pOutput, frameCount,
+                                pDevice->playback.channels);
+        }
     }
 
     static void soloud_miniaudio_deinit(SoLoud::Soloud *aSoloud)
     {
+        // In slave mode, we don't own a device
+        if (gSlaveMode) {
+            if (g_unregisterSlaveCallback != nullptr) {
+                g_unregisterSlaveCallback();
+            }
+            gSlaveMode = false;
+            return;
+        }
+
         // Clean up initialization thread if it's still running
         if (gInitThread != nullptr)
         {
@@ -256,6 +297,10 @@ namespace SoLoud
     {
         if (aSoloud == nullptr)
             return UNKNOWN_ERROR;
+
+        // In slave mode, we don't own the device
+        if (gSlaveMode)
+            return 0;
 
         // Check if device is stopped and start it if needed
         if (ma_device_get_state(&gDevice) == ma_device_state_stopped)
@@ -463,5 +508,107 @@ namespace SoLoud
         ma_device_start(&gDevice);
         return 0;
     }
+    // =========================================================================
+    // SLAVE MODE - For unified audio device (AEC clock synchronization)
+    // =========================================================================
+
+    // Callback function that Capture's data_callback will invoke to get mixed audio.
+    static void soloud_slave_mix_callback(float *output, unsigned int frameCount,
+                                          unsigned int channels) {
+        if (soloud == nullptr) {
+            memset(output, 0, frameCount * channels * sizeof(float));
+            return;
+        }
+
+        unsigned int soloudChannels = soloud->getBackendChannels();
+
+        if (soloudChannels == channels) {
+            soloud->mix(output, frameCount);
+        } else if (soloudChannels == 1 && channels == 2) {
+            static thread_local std::vector<float> monoBuffer;
+            if (monoBuffer.size() < frameCount) monoBuffer.resize(frameCount);
+            soloud->mix(monoBuffer.data(), frameCount);
+            for (unsigned int i = 0; i < frameCount; i++) {
+                output[i * 2] = monoBuffer[i];
+                output[i * 2 + 1] = monoBuffer[i];
+            }
+        } else if (soloudChannels == 2 && channels == 1) {
+            static thread_local std::vector<float> stereoBuffer;
+            if (stereoBuffer.size() < frameCount * 2) stereoBuffer.resize(frameCount * 2);
+            soloud->mix(stereoBuffer.data(), frameCount);
+            for (unsigned int i = 0; i < frameCount; i++) {
+                output[i] = (stereoBuffer[i * 2] + stereoBuffer[i * 2 + 1]) * 0.5f;
+            }
+        } else {
+            memset(output, 0, frameCount * channels * sizeof(float));
+        }
+    }
+
+    // Dynamically look up slave bridge symbols from flutter_recorder library
+    static void *g_flutterRecorderHandle = nullptr;
+
+    static bool lookupSlaveBridgeSymbols() {
+#ifndef _WIN32
+        if (g_registerSlaveCallback != nullptr) return true;
+
+        const char *libNames[] = {
+#if defined(__APPLE__)
+            "@rpath/flutter_recorder.framework/flutter_recorder",
+            "flutter_recorder.framework/flutter_recorder",
+#endif
+            "libflutter_recorder.so",
+            "./lib/libflutter_recorder.so",
+            nullptr
+        };
+
+        for (int i = 0; libNames[i] != nullptr; i++) {
+            g_flutterRecorderHandle = dlopen(libNames[i], RTLD_NOW | RTLD_NOLOAD);
+            if (g_flutterRecorderHandle != nullptr) break;
+        }
+        if (g_flutterRecorderHandle == nullptr) {
+            for (int i = 0; libNames[i] != nullptr; i++) {
+                g_flutterRecorderHandle = dlopen(libNames[i], RTLD_NOW);
+                if (g_flutterRecorderHandle != nullptr) break;
+            }
+        }
+        if (g_flutterRecorderHandle == nullptr) return false;
+
+        g_registerSlaveCallback = (SoloudRegisterSlaveCallbackFn)dlsym(
+            g_flutterRecorderHandle, "soloud_registerSlaveMixCallback");
+        g_unregisterSlaveCallback = (SoloudUnregisterSlaveCallbackFn)dlsym(
+            g_flutterRecorderHandle, "soloud_unregisterSlaveMixCallback");
+
+        return g_registerSlaveCallback != nullptr;
+#else
+        return false;
+#endif
+    }
+
+    // Initialize SoLoud in slave mode (no audio device created)
+    result miniaudio_init_slave(SoLoud::Soloud *aSoloud, unsigned int aFlags,
+                                unsigned int aSamplerate, unsigned int aBuffer,
+                                unsigned int aChannels) {
+        if (!lookupSlaveBridgeSymbols()) return UNKNOWN_ERROR;
+
+        soloud = aSoloud;
+        gSlaveMode = true;
+        gSlaveChannels = aChannels;
+        gSlaveSamplerate = aSamplerate;
+
+        aSoloud->enableLockFreeMode();
+        aSoloud->postinit_internal(aSamplerate, aBuffer, aFlags, aChannels);
+        aSoloud->mBackendCleanupFunc = soloud_miniaudio_deinit;
+        g_registerSlaveCallback(soloud_slave_mix_callback);
+        aSoloud->mBackendString = "MiniAudio (Slave Mode)";
+        return 0;
+    }
+
+    bool miniaudio_isSlaveMode_impl() { return gSlaveMode; }
+
+    result miniaudio_ensureDeviceStarted_impl() {
+        if (gSlaveMode) return 0;
+        return miniaudio_ensure_thread_device_started();
+    }
+
 };
 #endif
