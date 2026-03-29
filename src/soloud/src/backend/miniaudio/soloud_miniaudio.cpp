@@ -551,6 +551,16 @@ namespace SoLoud
 #ifndef _WIN32
         if (g_registerSlaveCallback != nullptr) return true;
 
+        // First try RTLD_DEFAULT — works when both plugins are statically linked
+        // into the same binary (macOS/iOS with use_frameworks! :linkage => :static)
+        g_registerSlaveCallback = (SoloudRegisterSlaveCallbackFn)dlsym(
+            RTLD_DEFAULT, "soloud_registerSlaveMixCallback");
+        g_unregisterSlaveCallback = (SoloudUnregisterSlaveCallbackFn)dlsym(
+            RTLD_DEFAULT, "soloud_unregisterSlaveMixCallback");
+
+        if (g_registerSlaveCallback != nullptr) return true;
+
+        // Fall back to dlopen — works when plugins are separate dynamic libraries
         const char *libNames[] = {
 #if defined(__APPLE__)
             "@rpath/flutter_recorder.framework/flutter_recorder",
