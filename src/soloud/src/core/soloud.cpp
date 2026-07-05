@@ -27,9 +27,11 @@ freely, subject to the following restrictions:
 #include <math.h> // sin
 #include <float.h> // _controlfp
 #include <algorithm> // stable_sort
+#include <cstdio> // fprintf, stderr
 #include "soloud_internal.h"
 #include "soloud_thread.h"
 #include "soloud_fft.h"
+#include "soloud_lockfree.h"
 
 
 #ifdef SOLOUD_SSE_INTRINSICS
@@ -171,6 +173,11 @@ namespace SoLoud
 		mResampleDataOwner = NULL;
 		for (i = 0; i < 3 * MAX_CHANNELS; i++)
 			m3dSpeakerPosition[i] = 0;
+
+		// Lock-free mode (for slave mode)
+		mLockFreeMode.store(false, std::memory_order_relaxed);
+		mCommandQueue = nullptr;
+		mVoiceSlotAllocator = nullptr;
 	}
 
 	Soloud::~Soloud()
@@ -188,6 +195,12 @@ namespace SoLoud
 		delete[] mVoiceGroup;
 		delete[] mResampleData;
 		delete[] mResampleDataOwner;
+
+		// Clean up lock-free structures
+		delete mCommandQueue;
+		delete mVoiceSlotAllocator;
+		mCommandQueue = nullptr;
+		mVoiceSlotAllocator = nullptr;
 	}
 
 	void Soloud::deinit()
@@ -214,6 +227,20 @@ namespace SoLoud
 		if (mAudioThreadMutex != NULL)
 		{
 			ret = miniaudio_changeDevice_impl(pPlaybackInfos_id);
+		}
+#endif
+		return ret;
+	}
+
+	// Ensure miniaudio device is started if it's stopped, ie by an interruption.
+	// Added for handling device state in some player.cpp methods.
+	result Soloud::miniaudio_ensureDeviceStarted()
+	{
+		int ret = 0;
+#if defined(WITH_MINIAUDIO)
+		if (mAudioThreadMutex != NULL && mBackendID == MINIAUDIO)
+		{
+			ret = miniaudio_ensureDeviceStarted_impl();
 		}
 #endif
 		return ret;
@@ -2140,6 +2167,12 @@ namespace SoLoud
 
 		lockAudioMutex_internal();
 
+		// In lock-free mode, process pending commands from the queue
+		if (mLockFreeMode.load(std::memory_order_acquire))
+		{
+			processCommandQueue_internal();
+		}
+
 		// Process faders. May change scratch size.
 		int i;
 		for (i = 0; i < (signed)mHighestVoice; i++)
@@ -2314,6 +2347,14 @@ namespace SoLoud
 
 	void Soloud::lockAudioMutex_internal()
 	{
+		// In lock-free mode, we don't use mutex - command queue handles sync
+		if (mLockFreeMode.load(std::memory_order_acquire))
+		{
+			// Just set the flag atomically for debugging
+			mInsideAudioThreadMutex = true;
+			return;
+		}
+
 		if (mAudioThreadMutex)
 		{
 			Thread::lockMutex(mAudioThreadMutex);
@@ -2324,11 +2365,226 @@ namespace SoLoud
 
 	void Soloud::unlockAudioMutex_internal()
 	{
+		// In lock-free mode, we don't use mutex
+		if (mLockFreeMode.load(std::memory_order_acquire))
+		{
+			mInsideAudioThreadMutex = false;
+			return;
+		}
+
 		SOLOUD_ASSERT(mInsideAudioThreadMutex);
 		mInsideAudioThreadMutex = false;
 		if (mAudioThreadMutex)
 		{
 			Thread::unlockMutex(mAudioThreadMutex);
+		}
+	}
+
+	void Soloud::enableLockFreeMode()
+	{
+		// Create command queue and slot allocator
+		if (!mCommandQueue)
+		{
+			mCommandQueue = new CommandQueue();
+		}
+		if (!mVoiceSlotAllocator)
+		{
+			mVoiceSlotAllocator = new VoiceSlotAllocator();
+		}
+
+		// Enable lock-free mode
+		mLockFreeMode.store(true, std::memory_order_release);
+
+		fprintf(stderr, "[SoLoud] Lock-free mode enabled\n");
+		fflush(stderr);
+	}
+
+	void Soloud::processCommandQueue_internal()
+	{
+		if (!mCommandQueue)
+			return;
+
+		AudioCommand cmd;
+		int processed = 0;
+
+		// Process all pending commands
+		while (mCommandQueue->tryPop(cmd))
+		{
+			processed++;
+
+			switch (cmd.type)
+			{
+			case CMD_PLAY:
+				// Voice slot already reserved, instance already created
+				if (cmd.voiceIndex >= 0 && cmd.voiceIndex < VOICE_COUNT && cmd.instancePtr)
+				{
+					AudioSourceInstance* instance = (AudioSourceInstance*)cmd.instancePtr;
+
+					// Set up the voice
+					mVoice[cmd.voiceIndex] = instance;
+
+					// Apply initial settings
+					if (cmd.params.play.paused)
+					{
+						mVoice[cmd.voiceIndex]->mFlags |= AudioSourceInstance::PAUSED;
+					}
+
+					setVoicePan_internal(cmd.voiceIndex, cmd.params.play.pan);
+					setVoiceVolume_internal(cmd.voiceIndex, cmd.params.play.volume);
+
+					// Fix initial volume ramp
+					for (int i = 0; i < MAX_CHANNELS; i++)
+					{
+						mVoice[cmd.voiceIndex]->mCurrentChannelVolume[i] =
+							mVoice[cmd.voiceIndex]->mChannelVolume[i] *
+							mVoice[cmd.voiceIndex]->mOverallVolume;
+					}
+
+					setVoiceRelativePlaySpeed_internal(cmd.voiceIndex, 1);
+					mActiveVoiceDirty = true;
+
+					// Mark slot as active
+					if (mVoiceSlotAllocator)
+					{
+						mVoiceSlotAllocator->activateSlot(cmd.voiceIndex);
+					}
+
+					// Update highest voice
+					if (cmd.voiceIndex >= (int)mHighestVoice)
+					{
+						mHighestVoice = cmd.voiceIndex + 1;
+					}
+
+					fprintf(stderr, "[SoLoud CMD_PLAY] voice=%d paused=%d vol=%.3f pan=%.3f overallVol=%.3f flags=0x%x\n",
+						cmd.voiceIndex,
+						(mVoice[cmd.voiceIndex]->mFlags & AudioSourceInstance::PAUSED) ? 1 : 0,
+						cmd.params.play.volume,
+						cmd.params.play.pan,
+						mVoice[cmd.voiceIndex]->mOverallVolume,
+						mVoice[cmd.voiceIndex]->mFlags);
+					fflush(stderr);
+				}
+				break;
+
+			case CMD_STOP:
+				{
+					int voice = getVoiceFromHandle_internal(cmd.handle);
+					if (voice >= 0)
+					{
+						stopVoice_internal(voice);
+						if (mVoiceSlotAllocator)
+						{
+							mVoiceSlotAllocator->freeSlot(voice);
+						}
+					}
+				}
+				break;
+
+			case CMD_STOP_ALL:
+				for (int i = 0; i < (int)mHighestVoice; i++)
+				{
+					if (mVoice[i])
+					{
+						stopVoice_internal(i);
+						if (mVoiceSlotAllocator)
+						{
+							mVoiceSlotAllocator->freeSlot(i);
+						}
+					}
+				}
+				break;
+
+			case CMD_SET_PAUSE:
+				{
+					int voice = getVoiceFromHandle_internal(cmd.handle);
+					if (voice >= 0 && mVoice[voice])
+					{
+						setVoicePause_internal(voice, cmd.params.setBool.value ? 1 : 0);
+					}
+				}
+				break;
+
+			case CMD_SET_VOLUME:
+				{
+					int voice = getVoiceFromHandle_internal(cmd.handle);
+					if (voice >= 0 && mVoice[voice])
+					{
+						mVoice[voice]->mVolumeFader.mActive = 0;
+						setVoiceVolume_internal(voice, cmd.params.setFloat.value);
+					}
+				}
+				break;
+
+			case CMD_SET_PAN:
+				{
+					int voice = getVoiceFromHandle_internal(cmd.handle);
+					if (voice >= 0 && mVoice[voice])
+					{
+						mVoice[voice]->mPanFader.mActive = 0;
+						setVoicePan_internal(voice, cmd.params.setFloat.value);
+					}
+				}
+				break;
+
+			case CMD_SET_SPEED:
+				{
+					int voice = getVoiceFromHandle_internal(cmd.handle);
+					if (voice >= 0 && mVoice[voice])
+					{
+						mVoice[voice]->mRelativePlaySpeedFader.mActive = 0;
+						setVoiceRelativePlaySpeed_internal(voice, cmd.params.setFloat.value);
+					}
+				}
+				break;
+
+			case CMD_SEEK:
+				{
+					int voice = getVoiceFromHandle_internal(cmd.handle);
+					if (voice >= 0 && mVoice[voice])
+					{
+						mVoice[voice]->seek(cmd.params.seek.position, mScratch.mData, mScratchSize);
+					}
+				}
+				break;
+
+			case CMD_SET_LOOPING:
+				{
+					int voice = getVoiceFromHandle_internal(cmd.handle);
+					if (voice >= 0 && mVoice[voice])
+					{
+						if (cmd.params.setBool.value)
+						{
+							mVoice[voice]->mFlags |= AudioSourceInstance::LOOPING;
+						}
+						else
+						{
+							mVoice[voice]->mFlags &= ~AudioSourceInstance::LOOPING;
+						}
+					}
+				}
+				break;
+
+			case CMD_SET_DELAY:
+				{
+					int voice = getVoiceFromHandle_internal(cmd.handle);
+					if (voice >= 0 && mVoice[voice])
+					{
+						mVoice[voice]->mDelaySamples = cmd.params.setUint.value;
+					}
+				}
+				break;
+
+			default:
+				break;
+			}
+		}
+
+		// Debug: log if we processed commands (sparse)
+		static int logCounter = 0;
+		if (processed > 0 && logCounter++ % 100 == 0)
+		{
+			fprintf(stderr, "[SoLoud LockFree] Processed %d commands\n", processed);
+			fflush(stderr);
 		}
 	}
 
