@@ -2455,6 +2455,9 @@ namespace SoLoud
 						mHighestVoice = cmd.voiceIndex + 1;
 					}
 
+#ifdef SOLOUD_LOCKFREE_DEBUG_LOGGING
+					// RT-thread I/O: fprintf on the mix thread stalls the render
+					// deadline (measured multi-ms) — debug builds only.
 					fprintf(stderr, "[SoLoud CMD_PLAY] voice=%d paused=%d vol=%.3f pan=%.3f overallVol=%.3f flags=0x%x\n",
 						cmd.voiceIndex,
 						(mVoice[cmd.voiceIndex]->mFlags & AudioSourceInstance::PAUSED) ? 1 : 0,
@@ -2463,6 +2466,7 @@ namespace SoLoud
 						mVoice[cmd.voiceIndex]->mOverallVolume,
 						mVoice[cmd.voiceIndex]->mFlags);
 					fflush(stderr);
+#endif
 				}
 				break;
 
@@ -2580,12 +2584,16 @@ namespace SoLoud
 		}
 
 		// Debug: log if we processed commands (sparse)
+#ifdef SOLOUD_LOCKFREE_DEBUG_LOGGING
 		static int logCounter = 0;
 		if (processed > 0 && logCounter++ % 100 == 0)
 		{
 			fprintf(stderr, "[SoLoud LockFree] Processed %d commands\n", processed);
 			fflush(stderr);
 		}
+#else
+		(void)processed;
+#endif
 	}
 
 };
