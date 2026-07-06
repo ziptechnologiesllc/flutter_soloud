@@ -118,3 +118,6 @@
 #include "filters/pitch_shift_filter.cpp"
 #include "filters/limiter.cpp"
 #include "filters/compressor.cpp"
+#include "aec_bridge.cpp"
+#include "looper_bridge.cpp"
+#include "waveform_extractor.cpp"

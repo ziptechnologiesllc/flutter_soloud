@@ -3,6 +3,7 @@
 #include "filters/filters.h"
 #include "soloud.h"
 #include "soloud/include/soloud.h"
+#include "soloud_internal.h" // for SoLoud::miniaudio_init_slave (slave mode)
 #include "soloud_wav.h"
 // #include "soloud_thread.h"
 #include "soloud_wavstream.h"
@@ -200,10 +201,13 @@ PlayerErrors Player::init(unsigned int sampleRate, unsigned int bufferSize, unsi
         return playerAlreadyInited;
 
     void *playbackInfos_id = nullptr;
+    // Keep the device list alive until after soloud.init() — playbackInfos_id
+    // points into it (was dangling when scoped inside the if-block).
+    std::vector<PlaybackDevice> devices;
     if (deviceID != -1)
     {
         // Get the device list and find the requested device
-        auto const devices = listPlaybackDevices();
+        devices = listPlaybackDevices();
         if (devices.size() == 0 || deviceID >= devices.size())
             return noPlaybackDevicesFound;
         // Use the stored device ID from the PlaybackDevice struct
@@ -232,6 +236,50 @@ PlayerErrors Player::init(unsigned int sampleRate, unsigned int bufferSize, unsi
         mChannels = channels;
         // Start the deferred-pause scheduler now that the engine is in use.
         startPauseEngineScheduler();
+    }
+    else
+        result = backendNotInited;
+    return (PlayerErrors)result;
+}
+
+PlayerErrors Player::initSlave(unsigned int sampleRate, unsigned int bufferSize,
+                               unsigned int channels)
+{
+    if (mInited)
+        return playerAlreadyInited;
+
+    // Initialize SoLoud in slave mode - no audio device created.
+    // The Capture plugin's duplex device will drive audio output.
+    SoLoud::result result;
+    try {
+        // Match upstream init() semantics: flags = 0 (hard clip at +/-1)
+        // with unity post-clip gain instead of CLIP_ROUNDOFF + 0.95 scaler.
+        // This keeps the mix we pull as the LSAEC echo-template reference
+        // unity-gain and linear below full scale.
+        result = SoLoud::miniaudio_init_slave(
+            &soloud,
+            0,
+            sampleRate, bufferSize, channels);
+        if (result == SoLoud::SO_NO_ERROR)
+        {
+            soloud.setPostClipScaler(1.0f);
+        }
+    } catch (...) {
+        return backendNotInited;
+    }
+
+    if (result == SoLoud::SO_NO_ERROR)
+    {
+        mInited = true;
+        mSampleRate = sampleRate;
+        mBufferSize = bufferSize;
+        mChannels = channels;
+        // NOTE: deliberately do NOT start the deferred-pause scheduler here.
+        // In slave mode soloud.pause()/resume() are NOT_IMPLEMENTED no-ops
+        // (miniaudio_init_slave never sets mBackendPauseFunc/mBackendResumeFunc),
+        // and the scheduler would call getActiveVoiceCount() (which locks the
+        // audio mutex) from a non-RT thread against the lock-free engine.
+        // pauseEngine() safely early-returns while the thread isn't running.
     }
     else
         result = backendNotInited;
@@ -271,7 +319,17 @@ std::vector<PlaybackDevice> Player::listPlaybackDevices()
     ma_uint32 captureCount;
     std::vector<PlaybackDevice> ret;
     ma_result result;
-    if ((result = ma_context_init(NULL, 0, NULL, &context)) != MA_SUCCESS)
+    // Never touch the AVAudioSession from this enumeration context. Without
+    // these flags, ma_context_uninit() below would call
+    // [AVAudioSession setActive:false] app-wide, silencing live audio if
+    // enumeration runs while the duplex device is playing. Harmless on
+    // non-Apple platforms. The single AVAudioSession owner is
+    // flutter_recorder's coreaudio_duplex.mm configureSession().
+    ma_context_config contextConfig = ma_context_config_init();
+    contextConfig.coreaudio.sessionCategory = ma_ios_session_category_none;
+    contextConfig.coreaudio.noAudioSessionActivate = true;
+    contextConfig.coreaudio.noAudioSessionDeactivate = true;
+    if ((result = ma_context_init(NULL, 0, &contextConfig, &context)) != MA_SUCCESS)
     {
         // Failed to initialize audio context.
         return ret;
@@ -539,6 +597,56 @@ PlayerErrors Player::loadMem(
     }
 
     return loadError;
+}
+
+PlayerErrors Player::loadRawWave(
+    const std::string &uniqueName,
+    float *samples,
+    unsigned int numSamples,
+    float sampleRate,
+    unsigned int channels,
+    bool copy,
+    bool takeOwnership,
+    unsigned int &hash)
+{
+    if (!mInited)
+        return backendNotInited;
+
+    hash = 0;
+
+    unsigned int newHash = (int32_t)std::hash<std::string>{}(uniqueName) & 0x7fffffff;
+
+    {
+        std::lock_guard<std::recursive_mutex> lock(sounds_mutex);
+        /// check if the sound has already been loaded
+        auto const s = findByHash(newHash);
+
+        if (s != nullptr)
+        {
+            hash = newHash;
+            return fileAlreadyLoaded;
+        }
+    }
+
+    auto newSound = std::make_unique<ActiveSound>();
+    newSound.get()->completeFileName = std::string(uniqueName);
+    hash = newHash;
+    newSound.get()->soundHash = newHash;
+
+    // Create Wav and load raw PCM data directly
+    newSound.get()->sound = std::make_unique<SoLoud::Wav>();
+    newSound.get()->soundType = TYPE_WAV;
+    SoLoud::result result = static_cast<SoLoud::Wav *>(newSound.get()->sound.get())->loadRawWave(
+        samples, numSamples, sampleRate, channels, copy, takeOwnership);
+
+    if (result == SoLoud::SO_NO_ERROR)
+    {
+        newSound.get()->filters = std::make_unique<Filters>(&soloud, newSound.get(), nullptr);
+        std::lock_guard<std::recursive_mutex> lock(sounds_mutex);
+        sounds.push_back(std::move(newSound));
+    }
+
+    return (PlayerErrors)result;
 }
 
 PlayerErrors Player::setBufferStream(
@@ -986,11 +1094,11 @@ void Player::stop(unsigned int handle)
     pauseEngine();
 }
 
-void Player::removeHandle(unsigned int handle)
+bool Player::removeHandle(unsigned int handle)
 {
     std::lock_guard<std::recursive_mutex> lock(sounds_mutex);
     if (sounds.empty()) {
-        return;
+        return false;
     }
 
     bool found = false;
@@ -1009,6 +1117,7 @@ void Player::removeHandle(unsigned int handle)
         }
         ++i;
     }
+    return found;
 }
 
 void Player::disposeSound(unsigned int soundHash)

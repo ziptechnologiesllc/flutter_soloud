@@ -1,7 +1,7 @@
 #ifndef LOOPER_BRIDGE_H
 #define LOOPER_BRIDGE_H
 
-#include "common.h"
+#include "soloud_common.h"
 #include <cstddef>
 #include <cstdint>
 

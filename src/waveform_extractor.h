@@ -1,7 +1,7 @@
 #ifndef WAVEFORM_EXTRACTOR_H
 #define WAVEFORM_EXTRACTOR_H
 
-#include "common.h"
+#include "soloud_common.h"
 
 #ifdef __cplusplus
 extern "C" {

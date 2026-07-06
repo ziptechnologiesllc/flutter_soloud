@@ -1,6 +1,6 @@
 #include "looper_bridge.h"
 #include "player.h"
-#include "common.h"
+#include "soloud_common.h"
 #include "soloud.h"
 #include <cstdint>
 #include <cstdio>

@@ -1,4 +1,6 @@
+#include "aec_bridge.h"
 #include "analyzer.h"
+#include "looper_bridge.h"
 #include "player.h"
 #include "soloud/include/soloud_bus.h"
 #include "soloud/include/soloud_fft.h"
@@ -15,6 +17,7 @@
 #endif
 
 #include <atomic>
+#include <iostream>
 #include <map>
 #include <memory.h>
 #include <memory>
@@ -106,10 +109,10 @@ FFI_PLUGIN_EXPORT void nativeFree(void *pointer) { free(pointer); }
 FFI_PLUGIN_EXPORT void voiceEndedCallback(unsigned int *handle) {
   bool isHandleFound = false;
   if (player != nullptr) {
-    isHandleFound = player->findByHandle(*handle) != nullptr;
-    if (isHandleFound)
-      player->removeHandle(*handle);
-    else
+    // removeHandle atomically finds and removes the handle under the
+    // sounds_mutex (avoids the racy find-then-remove double lookup).
+    isHandleFound = player->removeHandle(*handle);
+    if (!isHandleFound)
       // If the handle is not found, for sure it is already
       // removed by a previous call to `voiceEndedCallback`.
       // For example triggering a `stop` in a `Future` after the sound is ended
@@ -180,6 +183,11 @@ setDartEventCallback(dartVoiceEndedCallback_t voice_ended_callback,
   dartStateChangedCallback.store(state_changed_callback);
 }
 
+// Forward decls (defined below in the NATIVE AUDIO SINK block and in
+// waveform_extractor.cpp).
+FFI_PLUGIN_EXPORT void soloud_disableNativeAudioSink();
+FFI_PLUGIN_EXPORT void clearWaveformExtractedCallback();
+
 FFI_PLUGIN_EXPORT void clearDartCallbackRegistrations() {
   std::lock_guard<std::mutex> guard_init(init_deinit_mutex);
   std::lock_guard<std::mutex> guard_load(loadMutex);
@@ -187,6 +195,18 @@ FFI_PLUGIN_EXPORT void clearDartCallbackRegistrations() {
   dartVoiceEndedCallback.store(nullptr);
   dartFileLoadedCallback.store(nullptr);
   dartStateChangedCallback.store(nullptr);
+
+  // Fork additions: clear our bridge callbacks too so a hot restart cannot
+  // leave stale pointers behind. Dart re-registers all of these on re-init.
+  // - looper playback-started and waveform-extracted callbacks target Dart
+  //   NativeCallables (stale after hot restart).
+  // - the native audio sink feeds a stream hash that dies with the deinit
+  //   that follows this call.
+  // - the AEC output callback is re-registered by the AEC setup flow.
+  looper_clearPlaybackStartedCallback();
+  clearWaveformExtractedCallback();
+  soloud_disableNativeAudioSink();
+  aec_clearOutputCallback();
 
   if (player.get() != nullptr) {
     player.get()->clearDartCallbackRegistrations();
@@ -245,6 +265,41 @@ FFI_PLUGIN_EXPORT enum PlayerErrors initEngine(int deviceID,
 
         return PlayerErrors::noError;
     }
+
+/// Initialize the player in slave mode (no audio device created).
+/// In slave mode, SoLoud's audio output is driven by an external callback.
+///
+/// [sampleRate] the sample rate to match the capture device.
+/// [bufferSize] the audio buffer size.
+/// [channels] number of channels.
+///
+/// Returns [PlayerErrors.noError] if success.
+FFI_PLUGIN_EXPORT enum PlayerErrors initEngineSlave(unsigned int sampleRate,
+                                                    unsigned int bufferSize,
+                                                    unsigned int channels) {
+  std::lock_guard<std::mutex> guard(init_deinit_mutex);
+  std::lock_guard<std::mutex> guard_load(loadMutex);
+
+  if (player.get() == nullptr)
+    player = std::make_unique<Player>();
+
+  player.get()->setStateChangedCallback(stateChangedCallback);
+  PlayerErrors res =
+      (PlayerErrors)player.get()->initSlave(sampleRate, bufferSize, channels);
+  if (res != noError)
+    return res;
+
+  // Set window size for filters
+  const int windowSize = (player.get()->soloud.getBackendBufferSize() /
+                          player.get()->soloud.getBackendChannels()) -
+                         1;
+  analyzer.get()->setWindowsSize(windowSize);
+
+  // Set the callback for when a voice is ended/stopped
+  player.get()->setVoiceEndedCallback(voiceEndedCallback);
+
+  return PlayerErrors::noError;
+}
 
 /// Change the playback device.
 ///
@@ -545,6 +600,67 @@ addAudioDataStream(unsigned int hash, const unsigned char *data,
   if (player.get() == nullptr || !player.get()->isInited())
     return backendNotInited;
   return player.get()->addAudioDataStream(hash, data, aDataLen);
+}
+
+//////////////////////////////////////////////////////////////
+/// NATIVE AUDIO SINK - Direct native-to-native audio streaming
+/// This allows the recorder to feed audio directly to SoLoud
+/// without crossing to Dart (avoiding UI thread contention).
+//////////////////////////////////////////////////////////////
+
+// Native sink callback type - matches the signature needed by recorder
+typedef void (*NativeAudioSinkCallback)(const unsigned char *data,
+                                        unsigned int dataLen, void *userData);
+
+// Storage for the active native sink configuration
+static unsigned int g_nativeSinkHash = 0;
+static std::atomic<bool> g_nativeSinkActive{false};
+
+/// Internal function called from native sink - adds audio data without Dart
+/// overhead
+static void nativeAudioSinkCallback(const unsigned char *data,
+                                    unsigned int dataLen, void *userData) {
+  if (!g_nativeSinkActive.load(std::memory_order_acquire))
+    return;
+  if (player.get() == nullptr || !player.get()->isInited())
+    return;
+
+  // Add data directly - this runs on the recorder's callback thread
+  player.get()->addAudioDataStream(g_nativeSinkHash, data, dataLen);
+}
+
+/// Configure the native audio sink for direct recorder-to-player streaming.
+/// Call this after setBufferStream() to enable native-to-native audio path.
+/// [hash] - the sound hash from setBufferStream
+/// [callbackOut] - receives the native callback function pointer
+/// [userDataOut] - receives user data pointer (pass to callback)
+FFI_PLUGIN_EXPORT void
+soloud_configureNativeAudioSink(unsigned int hash,
+                                NativeAudioSinkCallback *callbackOut,
+                                void **userDataOut) {
+  g_nativeSinkHash = hash;
+  g_nativeSinkActive.store(true, std::memory_order_release);
+  *callbackOut = nativeAudioSinkCallback;
+  *userDataOut = nullptr; // No extra user data needed
+  fprintf(stderr, "[SoLoud] Native audio sink configured for hash %u\n", hash);
+}
+
+/// Disable the native audio sink
+FFI_PLUGIN_EXPORT void soloud_disableNativeAudioSink() {
+  g_nativeSinkActive.store(false, std::memory_order_release);
+  g_nativeSinkHash = 0;
+}
+
+/// Check if native audio sink is active
+FFI_PLUGIN_EXPORT bool soloud_isNativeAudioSinkActive() {
+  return g_nativeSinkActive.load(std::memory_order_acquire);
+}
+
+/// Get the looper bridge function pointer for direct native-to-native playback
+/// Returns the address of looper_loadAndPlayRaw function (raw PCM, no WAV
+/// overhead)
+FFI_PLUGIN_EXPORT void *soloud_getLooperBridgeFunction() {
+  return (void *)looper_loadAndPlayRaw;
 }
 
 // Set the end of the data stream.
@@ -1363,6 +1479,7 @@ isFilterActive(unsigned int soundHash, unsigned int busId, enum FilterType filte
     *index = player.get()->mFilters.isFilterActive(filterType);
   else {
     if (soundHash != 0) {
+      std::lock_guard<std::recursive_mutex> lock(player.get()->sounds_mutex);
       auto const s = player.get()->findByHash(soundHash);
       if (s == nullptr)
         return soundHashNotFound;
@@ -1417,6 +1534,7 @@ FFI_PLUGIN_EXPORT enum PlayerErrors addFilter(unsigned int soundHash,
     return player.get()->mFilters.addFilter(filterType);
 
   if (soundHash != 0) {
+    std::lock_guard<std::recursive_mutex> lock(player.get()->sounds_mutex);
     auto const s = player.get()->findByHash(soundHash);
     if (s == nullptr)
       return soundHashNotFound;
@@ -1448,6 +1566,7 @@ FFI_PLUGIN_EXPORT enum PlayerErrors removeFilter(unsigned int soundHash,
       return filterNotFound;
   } else {
     if (soundHash != 0) {
+      std::lock_guard<std::recursive_mutex> lock(player.get()->sounds_mutex);
       auto const s = player.get()->findByHash(soundHash);
       if (s == nullptr)
         return soundHashNotFound;
@@ -1496,6 +1615,7 @@ FFI_PLUGIN_EXPORT enum PlayerErrors setFilterParams(unsigned int handle,
         busFilters->filters.setFilterParams(handle > 0 ? handle : busFilters->handle, filterType, attributeId, value);
       }
     } else if (handle > 0) {
+      std::lock_guard<std::recursive_mutex> lock(player.get()->sounds_mutex);
       auto const &s = player.get()->findByHandle(handle);
       if (s == nullptr) {
         return soundHandleNotFound;
@@ -1544,6 +1664,7 @@ FFI_PLUGIN_EXPORT enum PlayerErrors getFilterParams(unsigned int handle,
         return noError;
       }
     } else {
+      std::lock_guard<std::recursive_mutex> lock(player.get()->sounds_mutex);
       auto const &s = player.get()->findByHandle(handle);
       if (s == nullptr)
         return soundHandleNotFound;
@@ -1591,6 +1712,7 @@ fadeFilterParameter(unsigned int handle, unsigned int busId, enum FilterType fil
                                                 time);
       }
     } else {
+      std::lock_guard<std::recursive_mutex> lock(player.get()->sounds_mutex);
       auto const &s = player.get()->findByHandle(handle);
       if (s == nullptr) {
         return soundHandleNotFound;
@@ -1634,6 +1756,7 @@ oscillateFilterParameter(unsigned int handle, unsigned int busId, enum FilterTyp
                                                      from, to, time);
       }
     } else {
+      std::lock_guard<std::recursive_mutex> lock(player.get()->sounds_mutex);
       auto const &s = player.get()->findByHandle(handle);
       if (s == nullptr) {
         return soundHandleNotFound;
@@ -1979,6 +2102,34 @@ FFI_PLUGIN_EXPORT unsigned int busGetActiveVoiceCount(unsigned int busId) {
   if (player.get() == nullptr)
     return 0;
   return player.get()->busGetActiveVoiceCount(busId);
+}
+
+/////////////////////////////////////////
+/// Waveform extraction
+/////////////////////////////////////////
+
+// Extract samples from an already-loaded audio source
+// (defined in waveform_extractor.cpp)
+FFI_PLUGIN_EXPORT int extractSamplesFromLoadedSource(unsigned int hash,
+                                                     float startTime,
+                                                     float endTime,
+                                                     unsigned long numSamplesNeeded,
+                                                     bool average,
+                                                     float *pSamples);
+
+/////////////////////////
+/// AEC (Adaptive Echo Cancellation)
+/////////////////////////
+
+// Set the AEC output callback (called from Dart with callback from
+// flutter_recorder)
+FFI_PLUGIN_EXPORT void setAECOutputCallback(void *callbackPtr) {
+  aec_setOutputCallback(reinterpret_cast<AECOutputCallback>(callbackPtr));
+}
+
+// Clear the AEC output callback
+FFI_PLUGIN_EXPORT void clearAECOutputCallback() {
+  aec_clearOutputCallback();
 }
 
 #ifdef __cplusplus

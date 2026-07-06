@@ -3,12 +3,14 @@
 #ifndef PLAYER_H
 #define PLAYER_H
 
+#include "aec_bridge.h"
 #include "active_sound.h"
 #include "audiobuffer/audiobuffer.h"
 #include "audiobuffer/buffer.h"
 #include "audiobuffer/metadata_ffi.h"
 #include "enums.h"
 #include "filters/filters.h"
+#include "looper_bridge.h"
 #include "soloud/include/soloud.h"
 #include "soloud/include/soloud_speech.h"
 #include "soloud/src/backend/miniaudio/miniaudio.h"
@@ -45,6 +47,18 @@ public:
   /// @return Returns [PlayerErrors.SO_NO_ERROR] if success.
   PlayerErrors init(unsigned int sampleRate, unsigned int bufferSize,
                     unsigned int channels, int deviceID = -1);
+
+  /// @brief Initialize the player in slave mode (no audio device created).
+  /// In slave mode, SoLoud's audio output is driven by an external callback
+  /// (typically from the Capture plugin's duplex device). This ensures perfect
+  /// clock synchronization for AEC on Linux where separate audio devices
+  /// have independent clocks that drift apart.
+  /// @param sampleRate sample rate to match the capture device.
+  /// @param bufferSize the audio buffer size.
+  /// @param channels number of channels.
+  /// @return Returns [PlayerErrors.SO_NO_ERROR] if success.
+  PlayerErrors initSlave(unsigned int sampleRate, unsigned int bufferSize,
+                         unsigned int channels);
 
   /// @brief Change the playback device.
   /// @param deviceID the device ID. -1 for default OS output device.
@@ -104,6 +118,25 @@ public:
   /// @param hash return the hash of the sound.
   PlayerErrors loadMem(const std::string &uniqueName, unsigned char *mem,
                        int length, bool loadIntoMem, unsigned int &hash);
+
+  /// @brief Load raw PCM float samples directly (no WAV/file header needed).
+  /// This is the most efficient way to load audio data that's already in memory
+  /// as raw samples - avoids building and parsing container formats.
+  /// @param uniqueName unique identifier for the sound (used for hash).
+  /// @param samples pointer to raw float samples (interleaved if stereo).
+  /// @param numSamples total number of samples (frames * channels).
+  /// @param sampleRate sample rate in Hz.
+  /// @param channels number of channels (1=mono, 2=stereo).
+  /// @param copy if true, SoLoud copies the data. If false, it uses the pointer
+  /// directly.
+  /// @param takeOwnership if true (and copy=false), SoLoud will free the memory
+  /// when done.
+  /// @param hash return the hash of the sound.
+  /// @return Returns [PlayerErrors.SO_NO_ERROR] if success.
+  PlayerErrors loadRawWave(const std::string &uniqueName, float *samples,
+                           unsigned int numSamples, float sampleRate,
+                           unsigned int channels, bool copy,
+                           bool takeOwnership, unsigned int &hash);
 
   /// @brief Set up an audio stream.
   /// @param hash return the hash of the sound.
@@ -260,7 +293,8 @@ public:
 
   /// @brief Remove the unique [handle] form the list of internal sounds.
   /// @param handle handle of the sound.
-  void removeHandle(unsigned int handle);
+  /// @return true if the handle was found and removed.
+  bool removeHandle(unsigned int handle);
 
   /// @brief Stop all handles of the already loaded sound identified by
   /// [soundHash] and clear it.
@@ -638,10 +672,15 @@ public:
 
   unsigned int mChannels;
 
+  /// mutex guarding all access to the `sounds` vector.
+  /// Must be held for any read/write/iteration of `sounds`.
+  /// (recursive to avoid deadlock in destructors; public because
+  /// looper_bridge.cpp and bindings.cpp lock it directly)
+  mutable std::recursive_mutex sounds_mutex;
+
 private:
   ma_device_info *pPlaybackInfos;
   std::mutex remove_handle_mutex;
-  mutable std::recursive_mutex sounds_mutex;  // Protects the sounds vector (recursive to avoid deadlock in destructors)
   unsigned int mBufferSize;
 
   std::map<unsigned int, BusData> busMap;

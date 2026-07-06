@@ -6,7 +6,7 @@
 #endif
 
 #include "waveform_extractor.h"
-#include "common.h"
+#include "soloud_common.h"
 #include "player.h"
 #include "soloud.h"
 #include "soloud_wav.h"

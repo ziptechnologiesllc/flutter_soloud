@@ -132,6 +132,21 @@ class FlutterSoLoudWeb extends FlutterSoLoud {
   }
 
   @override
+  PlayerErrors initEngineSlave(
+    int sampleRate,
+    int bufferSize,
+    Channels channels,
+  ) {
+    // Slave mode is not supported on web - it's a Linux-specific feature
+    // for AEC clock synchronization. Web doesn't need this because
+    // the browser handles audio device synchronization.
+    throw UnsupportedError(
+      'initEngineSlave is not supported on web. '
+      'Use initEngine instead.',
+    );
+  }
+
+  @override
   PlayerErrors changeDevice(int deviceId) {
     final ret = wasmChangeDevice(deviceId);
     return PlayerErrors.values[ret];
@@ -334,6 +349,48 @@ class FlutterSoLoudWeb extends FlutterSoLoud {
     wasmFree(audioChunkPtr);
 
     return PlayerErrors.values[result];
+  }
+
+  // ============================================================
+  // NATIVE AUDIO SINK - Not supported on web
+  // ============================================================
+
+  @override
+  ({int callbackAddress, int userDataAddress}) configureNativeAudioSinkRaw(
+    int soundHash,
+  ) {
+    // Native audio sink not supported on web
+    return (callbackAddress: 0, userDataAddress: 0);
+  }
+
+  @override
+  void disableNativeAudioSink() {
+    // No-op on web
+  }
+
+  @override
+  bool isNativeAudioSinkActive() {
+    return false; // Never active on web
+  }
+
+  @override
+  int getLooperBridgeFunction() {
+    return 0; // Not available on web
+  }
+
+  @override
+  void setLooperPlaybackStartedCallback(
+    void Function(int soundHash, int handle, double durationSeconds) callback,
+  ) {
+    // Not supported on web
+    throw UnsupportedError(
+      'setLooperPlaybackStartedCallback is not supported on web.',
+    );
+  }
+
+  @override
+  void clearLooperPlaybackStartedCallback() {
+    // No-op on web
   }
 
   @override
@@ -1252,5 +1309,55 @@ class FlutterSoLoudWeb extends FlutterSoLoud {
   @override
   int busGetActiveVoiceCount(int busId) {
     return wasmBusGetActiveVoiceCount(busId);
+  }
+
+  // ///////////////////////////////////////
+  // AEC (Adaptive Echo Cancellation)
+  // ///////////////////////////////////////
+
+  @override
+  void setAECOutputCallback(int callbackPtr) {
+    // AEC is not supported on web platform
+    throw UnsupportedError('AEC is not supported on web platform');
+  }
+
+  @override
+  void clearAECOutputCallback() {
+    // AEC is not supported on web platform
+    throw UnsupportedError('AEC is not supported on web platform');
+  }
+
+  // ///////////////////////////////////////
+  // Async Waveform Extraction
+  // ///////////////////////////////////////
+
+  @override
+  void setWaveformExtractedCallback(
+    void Function(int soundHash, int error) callback,
+  ) {
+    throw UnsupportedError(
+      'setWaveformExtractedCallback is not supported on web.',
+    );
+  }
+
+  @override
+  void clearWaveformExtractedCallback() {
+    // No-op on web
+  }
+
+  @override
+  void extractWaveformAsync(
+    int soundHash,
+    int numSamples, {
+    double startTime = 0,
+    double endTime = -1,
+    bool average = true,
+  }) {
+    throw UnsupportedError('extractWaveformAsync is not supported on web.');
+  }
+
+  @override
+  Float32List? getExtractedWaveform(int soundHash) {
+    throw UnsupportedError('getExtractedWaveform is not supported on web.');
   }
 }
