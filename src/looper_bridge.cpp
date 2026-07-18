@@ -8,9 +8,13 @@
 #include <mutex>
 #include <vector>
 
-// Access the global player from bindings.cpp
+// Access the globals from bindings.cpp. They are defined inside its
+// extern "C" block, so these declarations need C linkage too — otherwise
+// MSVC emits mangled C++ names and the link fails on Windows.
+extern "C" {
 extern std::unique_ptr<Player> player;
 extern std::mutex loadMutex;
+}
 
 // Callback to notify Dart when loop playback starts
 static LooperPlaybackStartedCallback g_looperCallback = nullptr;

@@ -38,6 +38,14 @@ distribution.
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
 #include <dlfcn.h>
+#else
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #endif
 
 // Slave bridge callback type (must match flutter_recorder's soloud_slave_bridge.h)
@@ -749,7 +757,31 @@ namespace SoLoud
 
         return g_registerSlaveCallback != nullptr;
 #else
-        return false;
+        if (g_registerSlaveCallback != nullptr) return true;
+
+        // flutter_recorder.dll is normally already loaded into the process by
+        // the Flutter plugin registrar; GetModuleHandle finds it without
+        // bumping its reference count. LoadLibrary is the fallback (bundled
+        // DLLs sit next to the runner exe, so the default search finds it).
+        HMODULE mod = GetModuleHandleA("flutter_recorder.dll");
+        if (mod == nullptr) {
+            mod = LoadLibraryA("flutter_recorder.dll");
+        }
+        if (mod == nullptr) return false;
+        g_flutterRecorderHandle = (void *)mod;
+
+        g_registerSlaveCallback = (SoloudRegisterSlaveCallbackFn)GetProcAddress(
+            mod, "soloud_registerSlaveMixCallback");
+        g_unregisterSlaveCallback = (SoloudUnregisterSlaveCallbackFn)GetProcAddress(
+            mod, "soloud_unregisterSlaveMixCallback");
+        g_registerSlaveControlCallbacks =
+            (SoloudRegisterSlaveControlCallbacksFn)GetProcAddress(
+                mod, "soloud_registerSlaveControlCallbacks");
+        g_unregisterSlaveControlCallbacks =
+            (SoloudUnregisterSlaveControlCallbacksFn)GetProcAddress(
+                mod, "soloud_unregisterSlaveControlCallbacks");
+
+        return g_registerSlaveCallback != nullptr;
 #endif
     }
 

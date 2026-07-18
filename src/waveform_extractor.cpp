@@ -16,8 +16,13 @@
 #include <thread>
 #include <atomic>
 
-// External reference to the global player instance from bindings.cpp
+// External reference to the global player instance from bindings.cpp.
+// It is defined inside an extern "C" block, so this declaration needs
+// C linkage too — otherwise MSVC emits a mangled C++ name and the link
+// fails on Windows.
+extern "C" {
 extern std::unique_ptr<Player> player;
+}
 
 // Callback for async waveform extraction
 static WaveformExtractedCallback g_waveformCallback = nullptr;
