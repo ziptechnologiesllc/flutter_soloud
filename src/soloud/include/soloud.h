@@ -28,6 +28,9 @@ freely, subject to the following restrictions:
 #include <stdlib.h> // rand
 #include <math.h> // sin
 #include <atomic>
+#if defined(__APPLE__)
+#include <os/lock.h> // os_unfair_lock for the slave/lock-free mode audio lock
+#endif
 
 #ifdef SOLOUD_NO_ASSERTS
 #define SOLOUD_ASSERT(x)
@@ -170,6 +173,21 @@ namespace SoLoud
 		bool mInsideAudioThreadMutex;
 		// Lock-free mode flag (slave mode uses command queue instead of mutex)
 		std::atomic<bool> mLockFreeMode;
+		// Audio-state lock for lock-free/slave mode. The command queue was
+		// never wired up as the sole mutation path, so direct API calls
+		// (Dart platform thread, looper worker) still mutate mVoice[]
+		// concurrently with the RT mix — this makes those critical sections
+		// real again. os_unfair_lock: userspace CAS when uncontended (as
+		// cheap as a spinlock), kernel parking WITH priority donation to the
+		// holder when contended — waiters sleeping out a full mix cost no
+		// CPU, and a preempted low-priority holder gets boosted instead of
+		// stalling the RT thread. Slave mode is Apple-only today; the
+		// non-Apple fallback is a plain spin.
+#if defined(__APPLE__)
+		os_unfair_lock mLockFreeLock = OS_UNFAIR_LOCK_INIT;
+#else
+		std::atomic_flag mLockFreeSpinLock = ATOMIC_FLAG_INIT;
+#endif
 		// Called by SoLoud to shut down the back-end. If NULL, not called. Should be set by back-end.
 		soloudCallFunction mBackendCleanupFunc;
 

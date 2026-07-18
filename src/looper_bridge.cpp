@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <memory>
 #include <mutex>
+#include <vector>
 
 // Access the global player from bindings.cpp
 extern std::unique_ptr<Player> player;
@@ -151,28 +152,41 @@ FFI_PLUGIN_EXPORT unsigned int looper_loadAndPlayRaw(float* samples,
     // Align with existing loops by querying the first loop's actual SoLoud
     // playback position and seeking the new loop to match.
     // This compensates for the loading latency (deinterleave + loadRawWave).
+    //
+    // LOCK ORDER: copy candidate handles out under sounds_mutex, then query
+    // SoLoud with the mutex RELEASED. isValidVoiceHandle/getStreamPosition/
+    // seek take the (now real, in slave mode) audio lock, and the canonical
+    // order is audioLock -> sounds_mutex (voice-ended callback) — holding
+    // sounds_mutex across them is an ABBA deadlock against the mixer.
+    // Handles are plain ints; if a voice dies between copy and query,
+    // isValidVoiceHandle just returns false and we try the next one.
     {
-        std::lock_guard<std::recursive_mutex> lock(player->sounds_mutex);
-        for (const auto& s : player->sounds) {
-            if (s->soundHash != soundHash && s->sound) {
-                // Found another playing sound — get its current position
-                // and use modulo to find where we should be in our loop
-                for (const auto& ah : s->handle) {
-                    if (ah.handle != 0 && player->soloud.isValidVoiceHandle(ah.handle)) {
-                        double refPos = player->soloud.getStreamPosition(ah.handle);
-                        double refLen = player->soloud.getStreamTime(ah.handle);
-                        if (refLen > 0) {
-                            double refPhase = fmod(refPos, refLen);
-                            double ourLen = (double)frames / sampleRate;
-                            double seekPos = fmod(refPhase, ourLen);
-                            player->soloud.seek(handle, seekPos);
+        std::vector<unsigned int> refHandles;
+        {
+            std::lock_guard<std::recursive_mutex> lock(player->sounds_mutex);
+            for (const auto& s : player->sounds) {
+                if (s->soundHash != soundHash && s->sound) {
+                    for (const auto& ah : s->handle) {
+                        if (ah.handle != 0) {
+                            refHandles.push_back(ah.handle);
                         }
-                        goto aligned;
                     }
                 }
             }
         }
-        aligned:;
+        for (unsigned int refHandle : refHandles) {
+            if (player->soloud.isValidVoiceHandle(refHandle)) {
+                double refPos = player->soloud.getStreamPosition(refHandle);
+                double refLen = player->soloud.getStreamTime(refHandle);
+                if (refLen > 0) {
+                    double refPhase = fmod(refPos, refLen);
+                    double ourLen = (double)frames / sampleRate;
+                    double seekPos = fmod(refPhase, ourLen);
+                    player->soloud.seek(handle, seekPos);
+                }
+                break;
+            }
+        }
     }
 
     if (outHandle) *outHandle = handle;

@@ -2347,10 +2347,37 @@ namespace SoLoud
 
 	void Soloud::lockAudioMutex_internal()
 	{
-		// In lock-free mode, we don't use mutex - command queue handles sync
+		// Lock-free/slave mode: the audio-state lock is real. Direct API
+		// calls (Dart platform thread, looper worker) mutate voice state
+		// concurrently with the RT mix; a no-op here lets those critical
+		// sections overlap (SIGABRT via the voiceops asserts in release,
+		// silent mVoice[] races otherwise).
+		//
+		// os_unfair_lock semantics fit both wait shapes:
+		//  - RT audio thread waiting on a µs-scale getter/setter critical
+		//    section: near-spinlock cost, and priority donation boosts a
+		//    preempted holder instead of dead-spinning.
+		//  - Everyone else waiting on mix_internal (which holds the lock for
+		//    a whole render cycle — multi-ms in debug): parked in the kernel,
+		//    woken on release. A userspace spin here caused the debug-build
+		//    contention spiral (waiters burning cores slowed the mix, which
+		//    lengthened the spins).
+		// No path re-locks on the same thread (audited: mix/
+		// processCommandQueue/stopVoice all use *_internal helpers).
 		if (mLockFreeMode.load(std::memory_order_acquire))
 		{
-			// Just set the flag atomically for debugging
+#if defined(__APPLE__)
+			os_unfair_lock_lock(&mLockFreeLock);
+#else
+			// Non-Apple fallback (slave mode is Apple-only today): plain spin.
+			while (mLockFreeSpinLock.test_and_set(std::memory_order_acquire))
+			{
+#if defined(__aarch64__) || defined(__arm__)
+				asm volatile("yield");
+#endif
+			}
+#endif
+			SOLOUD_ASSERT(!mInsideAudioThreadMutex);
 			mInsideAudioThreadMutex = true;
 			return;
 		}
@@ -2365,10 +2392,15 @@ namespace SoLoud
 
 	void Soloud::unlockAudioMutex_internal()
 	{
-		// In lock-free mode, we don't use mutex
 		if (mLockFreeMode.load(std::memory_order_acquire))
 		{
+			SOLOUD_ASSERT(mInsideAudioThreadMutex);
 			mInsideAudioThreadMutex = false;
+#if defined(__APPLE__)
+			os_unfair_lock_unlock(&mLockFreeLock);
+#else
+			mLockFreeSpinLock.clear(std::memory_order_release);
+#endif
 			return;
 		}
 
