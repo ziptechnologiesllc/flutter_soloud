@@ -2806,11 +2806,13 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
   /// Dart callback storage.
   static void Function(int soundHash, int error)? _waveformExtractedCallback;
 
-  /// Pending waveform buffer - stored here so it doesn't get GC'd during
-  /// async extraction.
-  static ffi.Pointer<ffi.Float>? _pendingWaveformBuffer;
-  static int _pendingWaveformNumSamples = 0;
-  static int _pendingWaveformHash = 0;
+  /// Pending waveform buffers keyed by sound hash — one async extraction can
+  /// be in flight per sound. This used to be a single static slot, which
+  /// concurrent extractions (loading several loops when joining a session)
+  /// clobbered: every hash but the last read back null in
+  /// [getExtractedWaveform] and its tile stayed blank forever.
+  static final Map<int, ffi.Pointer<ffi.Float>> _pendingWaveformBuffers = {};
+  static final Map<int, int> _pendingWaveformSampleCounts = {};
 
   /// Native callback that forwards to Dart.
   static void _nativeWaveformExtractedCallback(int soundHash, int error) {
@@ -2894,12 +2896,19 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
     double endTime = -1,
     bool average = true,
   }) {
+    // One in-flight extraction per hash: launching a second while the native
+    // thread is still writing the first buffer would either leak the buffer
+    // or free it under the writer (use-after-free). Callers retry via the
+    // bloc if they need fresher bounds.
+    if (_pendingWaveformBuffers.containsKey(soundHash)) {
+      return;
+    }
+
     final pSamples = calloc<ffi.Float>(numSamples);
 
     // Store for retrieval after callback
-    _pendingWaveformBuffer = pSamples;
-    _pendingWaveformNumSamples = numSamples;
-    _pendingWaveformHash = soundHash;
+    _pendingWaveformBuffers[soundHash] = pSamples;
+    _pendingWaveformSampleCounts[soundHash] = numSamples;
 
     _extractWaveformAsync(
       soundHash,
@@ -2915,19 +2924,14 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
   /// Call this in the callback after extraction completes.
   @override
   Float32List? getExtractedWaveform(int soundHash) {
-    if (_pendingWaveformBuffer == null || _pendingWaveformHash != soundHash) {
+    final buf = _pendingWaveformBuffers.remove(soundHash);
+    final numSamples = _pendingWaveformSampleCounts.remove(soundHash);
+    if (buf == null || numSamples == null) {
       return null;
     }
 
-    final samples = Float32List.fromList(
-      _pendingWaveformBuffer!.asTypedList(_pendingWaveformNumSamples),
-    );
-
-    calloc.free(_pendingWaveformBuffer!);
-    _pendingWaveformBuffer = null;
-    _pendingWaveformNumSamples = 0;
-    _pendingWaveformHash = 0;
-
+    final samples = Float32List.fromList(buf.asTypedList(numSamples));
+    calloc.free(buf);
     return samples;
   }
 }
